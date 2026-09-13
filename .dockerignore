@@ -1,0 +1,10 @@
+# Never ship secrets or the local dependency tree into the image.
+.env
+node_modules
+npm-debug.log
+.git
+.gitignore
+.DS_Store
+.claude
+Dockerfile
+.dockerignore

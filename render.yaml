@@ -1,0 +1,15 @@
+# Render.com blueprint. Importing the repo with this file present pre-fills
+# the service settings; GEMINI_API_KEY is deliberately marked sync:false so the
+# key is typed into Render's dashboard and never committed to the repo.
+services:
+  - type: web
+    name: vibe-cut
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /vibe-cut.html
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production

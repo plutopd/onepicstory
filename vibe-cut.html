@@ -1,0 +1,4096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vibe-cut — photo to video</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  /* Light theme is the default. Every colour the UI uses is declared here, so
+     the dark override below only restates values — never selectors.
+     The accent is a vivid orange rather than the old muted gold: on white a
+     desaturated gold reads washed out, and the whole point of this pass was
+     to stop looking like a default dark dev tool. */
+  :root{
+    --bg:#f6f7f9;
+    --panel:#ffffff;
+    --panel-2:#f1f3f7;
+    --line:#e4e7ec;
+    --text:#111318;
+    /* Body copy that used to be --muted: still secondary, but dark enough
+       to actually read. --muted is now reserved for tertiary hints. */
+    --text-2:#3f4654;
+    --muted:#5f6879;
+    --accent:#f56900;
+    --accent-bright:#ff8b2c;
+    --accent-text:#a83d00;   /* orange dark enough to read as text on white/tint */
+    --accent-soft:#ffd9b8;
+    --accent-tint:rgba(245,105,0,0.09);
+    --accent-tint-soft:rgba(245,105,0,0.045);
+    --accent-block:rgba(245,105,0,0.22);
+    --accent-glow:rgba(245,105,0,0.38);
+    --on-accent:#ffffff;
+    --ai:#0d9488;
+    --ai-text:#0b6b62;   /* teal dark enough to read as text on white */
+    --ai-bright:#14b8a6;
+    --ai-tint:rgba(13,148,136,0.1);
+    --ai-border:rgba(13,148,136,0.3);
+    --bad:#dc2626;
+    --glow-a:rgba(245,105,0,0.12);
+    --glow-b:rgba(13,148,136,0.09);
+    --film-strip:#d5dae2;
+    --film-hole:#ffffff;
+    --gap-stripe-a:#dfe3e9;
+    --gap-stripe-b:#eef1f4;
+    --thumb-bg:#2b2f36;   /* caption previews stay dark: they stand in for video */
+    --handle-grip:rgba(17,19,24,0.45);
+    --scrim:rgba(15,20,30,0.45);
+    --photo-dim:1;
+    --radius:9px;
+    --radius-lg:18px;
+    --shadow-card:0 14px 34px -22px rgba(15,23,42,0.3);
+  }
+  /* Dark theme — opt-in via the header toggle. */
+  :root[data-theme="dark"]{
+    --bg:#131217;
+    --panel:#1e1c23;
+    --panel-2:#28252d;
+    --line:#38343d;
+    --text:#f3efe7;
+    --text-2:#cfcad6;
+    --muted:#9994a0;
+    --accent:#ff8b2c;
+    --accent-bright:#ffab63;
+    --accent-text:#ffa257;
+    --accent-soft:#6b3d14;
+    --accent-tint:rgba(255,139,44,0.12);
+    --accent-tint-soft:rgba(255,139,44,0.06);
+    --accent-block:rgba(255,139,44,0.28);
+    --accent-glow:rgba(255,139,44,0.5);
+    --on-accent:#2a1402;
+    --ai:#4fd1c5;
+    --ai-text:#6fe0d4;
+    --ai-bright:#7ee8dc;
+    --ai-tint:rgba(79,209,197,0.12);
+    --ai-border:rgba(79,209,197,0.35);
+    --bad:#d9634f;
+    --glow-a:rgba(255,139,44,0.09);
+    --glow-b:rgba(79,209,197,0.08);
+    --film-strip:#28252d;
+    --film-hole:#3f3b47;
+    --gap-stripe-a:#0a0a0c;
+    --gap-stripe-b:#17161a;
+    --thumb-bg:#0c0c0e;
+    --handle-grip:rgba(241,237,228,0.55);
+    --scrim:rgba(0,0,0,0.75);
+    --photo-dim:0.85;
+    --shadow-card:0 24px 40px -28px rgba(0,0,0,0.65);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 560px at 12% -12%, var(--glow-a), transparent 60%),
+      radial-gradient(900px 480px at 104% 0%, var(--glow-b), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    padding:48px 20px 100px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:960px;margin:0 auto;}
+
+  .sprockets{display:flex; justify-content:space-between; padding:0 6px;}
+  .sprockets span{width:10px;height:6px;background:var(--film-hole);border-radius:2px;}
+  .filmframe{
+    border-top:14px solid var(--film-strip);
+    border-bottom:14px solid var(--film-strip);
+    position:relative; border-radius:4px;
+    display:flex; justify-content:center;
+  }
+  .filmframe .sprockets{position:absolute; left:0; right:0; width:100%;}
+  .filmframe .sprockets.top{top:-11px;}
+  .filmframe .sprockets.bottom{bottom:-11px;}
+
+  header{margin-bottom:36px;}
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:22px;}
+  .brand-mark{
+    width:30px; height:30px; border-radius:9px; flex-shrink:0;
+    background:linear-gradient(135deg, var(--accent-bright), var(--accent));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; color:var(--on-accent);
+    box-shadow:0 8px 18px -8px var(--accent-glow);
+  }
+  .brand-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; letter-spacing:-0.01em;}
+  .theme-toggle{
+    margin-left:12px; display:inline-flex; align-items:center; gap:6px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
+    border-radius:999px; padding:6px 13px; font-size:12px; font-weight:500; cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+  .account-chip{cursor:default; gap:8px;}
+  .account-chip:hover{border-color:var(--line); color:var(--muted);}
+  .account-signout{color:var(--accent-text); cursor:pointer; border-left:1px solid var(--line); padding-left:8px;}
+  .account-signout:hover{text-decoration:underline;}
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono',monospace; color:var(--accent-text);
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    padding:5px 12px; border:1px solid var(--accent-soft); border-radius:999px;
+    background:var(--accent-tint); margin-bottom:16px;
+  }
+  h1{
+    font-family:'Space Grotesk',sans-serif; font-size:40px; line-height:1.18;
+    margin:0 0 12px; letter-spacing:-0.02em; max-width:640px;
+  }
+  h1 .grad{
+    background:linear-gradient(90deg, var(--ai), var(--ai-bright));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  header p{color:var(--text-2); margin:0; font-size:16px; max-width:560px; line-height:1.7;}
+  /* Same bright mint gradient as the h1's "AI", bolded. Chosen deliberately
+     over the deeper --ai-text: at 16px this sits under the contrast bar the
+     rest of the body copy meets, and it stays an emphasis phrase only. */
+  .mint{
+    background:linear-gradient(90deg, var(--ai), var(--ai-bright));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    font-weight:700;
+  }
+  /* Korean has no inter-word hyphenation rules, so the default break-anywhere
+     behaviour splits words mid-morpheme ("간직해 / 보세요"). keep-all breaks at
+     spaces only. Scoped to prose — narrow UI chrome still needs to wrap hard. */
+  header p, .card-desc, .hint, .auth-sub, .onboard-sub, .onboard-drop-sub,
+  .preset-intro, .plan-feats li, .empty, .auth-note{ word-break:keep-all; }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius-lg); padding:26px 28px; margin-bottom:22px;
+    box-shadow:var(--shadow-card);
+  }
+
+  /* Compact settings bar sitting directly on top of the preview. */
+  .preview-toolbar{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px; margin-bottom:14px;
+    padding:12px 14px; background:var(--panel-2);
+    border:1px solid var(--line); border-radius:12px;
+  }
+  .ptb-field{min-width:0;}
+  .ptb-field label{
+    font-size:11.5px; font-weight:600; margin-bottom:5px; color:var(--text-2);
+  }
+  .ptb-field select, .ptb-field input[type=number]{
+    padding:7px 8px; font-size:12.5px; border-radius:7px; background:var(--panel);
+  }
+
+  /* Two-column editor layout. Below this width everything stays in the
+     original single stacked flow — the columns are purely a wide-screen
+     affordance, so phones are unaffected. */
+  /* Hidden until the two-column layout exists — there is nothing to resize
+     in the single stacked flow. */
+  .col-resizer{display:none;}
+
+  @media (min-width:1024px){
+    .wrap{max-width:1440px;}
+    .app-layout{
+      display:grid;
+      /* --right-col is driven by the drag handle (and restored from
+         localStorage), so the editor side can be widened to taste. */
+      grid-template-columns:minmax(0,1fr) 8px var(--right-col, 480px);
+      gap:14px; align-items:start;
+    }
+    .col-resizer{
+      display:block; position:sticky; top:24px; align-self:start;
+      height:calc(100vh - 48px); border-radius:999px;
+      background:var(--line); opacity:.55; cursor:col-resize;
+      touch-action:none; transition:opacity .15s, background .15s;
+    }
+    .col-resizer:hover, .col-resizer.dragging{opacity:1; background:var(--accent);}
+    .app-col-right{
+      position:sticky; top:24px;
+      /* lets the preview grow with the column, not just with the window */
+      container-type:inline-size;
+      max-height:calc(100vh - 48px); overflow-y:auto;
+      /* room for the scrollbar so it never sits on top of the timeline's
+         right-hand trim handle */
+      padding-right:4px;
+    }
+    .app-col-right .card{margin-bottom:0;}
+    /* 2x2 in the narrow column instead of three-across-plus-one-stretched */
+    .app-col-right .preview-toolbar{grid-template-columns:repeat(2,1fr);}
+    /* The sticky column has to fit the viewport in one piece — preview,
+       timeline AND the export button — so the canvas gets a tighter ceiling
+       here than the full-width layout's 58vh, and the long onboarding hints
+       shrink to buy back the rest of the room. */
+    .app-col-right canvas{max-height:28vh;}
+    /* A portrait preview is height-bound, so widening the column alone would
+       not enlarge it — raise the ceiling as the column gets roomier. */
+    @container (min-width:560px){ .app-col-right canvas{max-height:40vh;} }
+    @container (min-width:720px){ .app-col-right canvas{max-height:52vh;} }
+    .app-col-right .hint{font-size:11px; line-height:1.45; margin-top:6px;}
+    .app-col-right .card{padding:18px 20px;}
+    .app-col-right .preview-toolbar{padding:10px 11px; gap:8px; margin-bottom:10px;}
+    .app-col-right .estimate{margin:8px 0 4px;}
+    /* Reclaim horizontal room for the timeline bars in the narrower column. */
+    .app-col-right .track-label{width:64px; padding-left:24px; font-size:10px;}
+  }
+  .card h2{
+    font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700;
+    margin:0 0 16px; display:flex; align-items:center; gap:10px; color:var(--text);
+  }
+  .card-desc{color:var(--text-2); font-size:13.5px; line-height:1.65; margin:0 0 14px;}
+  .preset-intro{font-size:12.5px; color:var(--muted); margin-bottom:8px;}
+  .label-hint{font-weight:400; color:var(--muted); font-size:11.5px;}
+  .prompt-presets{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;}
+  .preset-chip{
+    border:1px solid var(--line); background:var(--panel-2); color:var(--text-2);
+    border-radius:999px; padding:7px 13px; font-size:12.5px; font-weight:500;
+    cursor:pointer; font-family:'Inter',sans-serif;
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .preset-chip:hover{border-color:var(--accent); color:var(--accent-text);}
+  .preset-chip.active{
+    background:var(--accent-tint); border-color:var(--accent);
+    color:var(--accent-text); font-weight:600;
+  }
+  .card h2 .num{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500;
+    width:26px; height:26px; border-radius:50%; flex-shrink:0;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
+  }
+  .card{border-left:3px solid transparent;}
+  .card.mode-ai{border-left-color:var(--ai);}
+  .card.mode-manual{border-left-color:var(--accent-soft);}
+  .card.mode-ai h2 .num{color:var(--ai); border-color:var(--ai-border);}
+  .card.mode-manual h2 .num{color:var(--accent-text); border-color:var(--accent-soft);}
+  .mode-badge{
+    font-size:10.5px; letter-spacing:.02em;
+    padding:3px 10px; border-radius:999px; font-weight:600; margin-left:auto;
+  }
+  .mode-badge.ai{color:var(--ai-text); background:var(--ai-tint); border:1px solid var(--ai-border);}
+  .mode-badge.manual{color:var(--accent-text); background:var(--accent-tint); border:1px solid var(--accent-soft);}
+
+  .dropzone{
+    border:1.5px dashed var(--line); border-radius:14px;
+    padding:44px 20px; text-align:center; cursor:pointer;
+    transition:border-color .15s, background .15s, transform .15s;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent); background:var(--accent-tint-soft); transform:translateY(-1px);}
+  .dropzone .icon{margin-bottom:10px; color:var(--muted); transition:color .15s;}
+  .dropzone:hover .icon, .dropzone.drag .icon{color:var(--accent);}
+  .dropzone .big{font-size:15.5px; margin-bottom:5px; font-weight:500;}
+  .dropzone .small{font-size:12.5px; color:var(--text-2);}
+  input[type=file]{display:none;}
+
+  .frames{display:flex; gap:10px; overflow-x:auto; padding:16px 4px 20px;}
+  .frame{flex:0 0 auto; width:120px; position:relative;}
+  .frame img{
+    width:120px; height:80px; object-fit:cover; border-radius:4px;
+    display:block; filter:brightness(var(--photo-dim));
+  }
+  .frame.excluded img{filter:grayscale(1) brightness(0.4);}
+  .frame .badge{
+    position:absolute; top:5px; left:5px; font-weight:600;
+    font-size:10px; padding:2px 5px; border-radius:3px; background:rgba(0,0,0,0.6);
+  }
+  .frame .badge.good{color:var(--ai);}
+  .frame .badge.low{color:var(--bad);}
+  /* Photos in the batch the AI curator is judging right now — the strip is
+     re-rendered per batch so this sweeps across the strip as it works. */
+  .frame.pending img{filter:brightness(1.05); outline:2px solid var(--ai); outline-offset:-2px;}
+  .frame .badge.pending-badge{color:var(--ai); animation:pendingPulse 1s ease-in-out infinite;}
+  @keyframes pendingPulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+  .frame .ctrl{display:flex; justify-content:space-between; align-items:center; margin-top:5px;}
+  .frame .ctrl button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 5px;}
+  .frame .ctrl button:hover{color:var(--accent);}
+  .frame .toggle{font-size:10px; cursor:pointer; font-family:'IBM Plex Mono',monospace;}
+  .frame.excluded .toggle{color:var(--bad);}
+  .frame:not(.excluded) .toggle{color:var(--ai);}
+
+  .crop-btn{
+    position:absolute; bottom:26px; right:5px; font-family:'IBM Plex Mono',monospace;
+    font-size:10px; padding:2px 6px; border-radius:3px; background:rgba(0,0,0,0.6);
+    color:var(--muted); border:1px solid var(--line); cursor:pointer;
+  }
+  .crop-btn:hover{color:var(--accent); border-color:var(--accent);}
+
+  .crop-modal{ position:fixed; inset:0; background:var(--scrim); z-index:100; display:none; align-items:center; justify-content:center; padding:20px; }
+  .crop-modal.open{ display:flex; }
+  .crop-modal-inner{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; max-width:420px; width:100%; }
+  .crop-modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px; gap:10px; }
+  .crop-viewport{ position:relative; overflow:hidden; background:#000; border-radius:6px; width:100%; max-height:60vh; margin:0 auto; touch-action:none; }
+  .crop-viewport img{ position:absolute; user-select:none; cursor:grab; max-width:none; }
+  .crop-viewport.dragging img{ cursor:grabbing; }
+  .crop-controls{ display:flex; align-items:center; gap:10px; margin-top:14px; font-size:12.5px; color:var(--text-2); }
+  .crop-controls input[type=range]{ flex:1; }
+  .caption-template-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .caption-template-btn{
+    flex:1 1 auto; min-width:76px; padding:6px; border-radius:6px; border:1px solid var(--line);
+    background:var(--thumb-bg); cursor:pointer; text-align:center; display:flex; flex-direction:column;
+    align-items:center; gap:4px;
+  }
+  .caption-template-btn:hover{ border-color:var(--accent); }
+  .caption-template-btn canvas{ display:block; border-radius:4px; width:100%; height:auto; }
+  .caption-template-btn span{ font-size:10.5px; font-weight:500; color:var(--text-2); white-space:nowrap; }
+  .caption-template-btn{ position:relative; }
+  .caption-template-del{
+    position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%;
+    background:rgba(0,0,0,0.65); color:#fff; font-size:10px; line-height:16px; text-align:center;
+    cursor:pointer;
+  }
+  .caption-template-divider{
+    flex-basis:100%; font-size:10px; color:var(--muted); margin-top:4px; letter-spacing:.04em;
+  }
+  .crop-modal-actions{ display:flex; justify-content:space-between; gap:10px; margin-top:16px; }
+  .btn-ghost-sm{ background:none;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:8px 14px;cursor:pointer;font-size:12.5px; transition:border-color .15s, color .15s; }
+  .btn-ghost-sm:hover{ border-color:var(--accent); color:var(--accent); }
+
+  .junction{
+    flex:0 0 auto; width:auto; min-width:26px;
+    display:flex; align-items:center; justify-content:center;
+    align-self:flex-start; margin-top:28px;
+  }
+  /* Default state: a small, quiet dot — barely there until you need it. */
+  .junction select{
+    width:22px; height:22px; padding:0; text-align:center; text-align-last:center;
+    background:transparent; color:var(--muted); border:1px solid var(--line);
+    border-radius:50%; font-size:12px; line-height:1; cursor:pointer;
+    appearance:none; -webkit-appearance:none; opacity:0.85;
+    transition:opacity .15s, border-color .15s, background .15s;
+  }
+  .junction select:hover{opacity:1; border-color:var(--accent); color:var(--accent-text); background:var(--accent-tint);}
+  /* Once a transition is actually chosen for this gap, expand into a
+     readable amber pill so it's obvious something custom is set here. */
+  .junction select.custom{
+    width:auto; min-width:22px; height:22px; padding:0 9px; border-radius:12px;
+    background:var(--accent-tint); border-color:var(--accent); color:var(--accent-text);
+    font-size:10.5px; font-weight:700; opacity:1; white-space:nowrap;
+  }
+
+  .row{display:flex; gap:20px; flex-wrap:wrap;}
+  .field{flex:1; min-width:200px;}
+  label{display:block; font-size:12.5px; font-weight:600; color:var(--text-2); margin-bottom:6px;}
+  select, input[type=number]{
+    width:100%; background:var(--panel-2); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-family:'Inter';
+    transition:border-color .15s;
+  }
+  select:focus, input[type=number]:focus{outline:none; border-color:var(--accent);}
+  .music-links{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .music-links a{
+    font-size:12.5px; font-weight:500; color:var(--accent-text); text-decoration:none;
+    border:1px solid var(--accent-soft); padding:6px 12px; border-radius:999px;
+    transition:background .15s;
+  }
+  .music-links a:hover{background:var(--accent-tint);}
+  .filebtn{
+    display:inline-block; margin-top:12px; padding:9px 16px; background:var(--panel-2);
+    border:1px solid var(--line); border-radius:999px; cursor:pointer; font-size:13px;
+    transition:border-color .15s;
+  }
+  .filebtn:hover{border-color:var(--accent);}
+  .filename{font-size:12.5px; color:var(--text-2); margin-left:8px;}
+
+  canvas{display:block; background:#000; border-radius:8px; max-width:100%; max-height:58vh; width:auto; height:auto;}
+
+  .estimate{
+    font-size:13.5px; font-weight:600; color:var(--ai-text);
+    margin:14px 0 6px;
+  }
+
+  .timeline-controls{display:flex; align-items:center; gap:10px; margin-top:14px;}
+  .play-btn{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text); cursor:pointer; font-size:13px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;
+  }
+  .play-btn:hover:not(:disabled){border-color:var(--accent);}
+  .play-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .time-display{font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--text-2); min-width:96px;}
+  .timeline-wrap{position:relative; margin-top:10px;}
+  .track-row{display:flex; align-items:stretch; gap:8px; margin-top:6px;}
+  /* Only the very first row of the timeline loses its top margin — rows
+     living inside the extra-track containers still need theirs, or an
+     added AUDIO2/CLIP2 ends up flush against the row above it. */
+  .timeline-wrap > .track-row:first-child{margin-top:0;}
+  .track-label{
+    position:relative; box-sizing:border-box;
+    width:74px; padding-left:26px; flex-shrink:0;
+    font-size:10.5px; font-weight:600; letter-spacing:0; color:var(--text-2);
+    display:flex; align-items:center;
+  }
+  /* The + sits in the label's own left gutter, absolutely positioned so it
+     is out of the layout flow entirely — every track's text then starts at
+     the same x, and every track's bar starts at the same x, whether or not
+     that row happens to have an add button. */
+  .track-add-btn{
+    position:absolute; left:0; top:50%; transform:translateY(-50%);
+    width:18px; height:18px; border-radius:4px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text); font-size:13px; line-height:1;
+    cursor:pointer; padding:0;
+  }
+  .track-add-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .timeline-seg-del{
+    position:absolute; top:2px; right:2px; width:14px; height:14px; border-radius:50%;
+    background:rgba(0,0,0,0.6); color:#fff; font-size:9px; line-height:14px; text-align:center;
+    cursor:pointer; z-index:2;
+  }
+  .timeline-track{
+    position:relative; flex:1; height:44px; background:var(--panel-2); border-radius:8px;
+    overflow:hidden; display:flex; cursor:pointer; touch-action:none;
+  }
+  .ruler-row{ margin-top:0; margin-bottom:2px; }
+  .timeline-ruler{
+    position:relative; flex:1; height:18px; cursor:pointer; touch-action:none;
+    border-bottom:1px solid var(--line);
+  }
+  .ruler-tick{ position:absolute; top:6px; bottom:0; width:1px; background:var(--line); }
+  .ruler-tick span{
+    position:absolute; top:-11px; left:3px; font-size:9px; color:var(--muted);
+    font-family:'IBM Plex Mono',monospace; white-space:nowrap;
+  }
+  .timeline-track.audio-track{height:32px; overflow:visible;}
+  .timeline-track.text-track{height:26px; overflow:visible; background:transparent;}
+  .caption-block{
+    position:absolute; top:0; bottom:0; background:var(--accent-block); border:1px solid var(--accent);
+    border-radius:4px; display:flex; align-items:center; padding:0 8px; overflow:hidden;
+    font-size:10.5px; font-weight:500; color:var(--accent-text); white-space:nowrap; cursor:grab; z-index:1;
+  }
+  .caption-block.dragging{opacity:0.6; cursor:grabbing;}
+  .caption-handle{ position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize; z-index:2; }
+  .caption-handle.left{left:-4px;}
+  .caption-handle.right{right:-4px;}
+  .timeline-seg{
+    position:relative; height:100%; background-size:cover; background-position:center;
+    border-right:1px solid rgba(0,0,0,0.4); flex-shrink:0; cursor:grab;
+  }
+  .timeline-seg:last-child{border-right:none;}
+  .timeline-seg.dragging-seg{opacity:0.4;}
+  .timeline-seg.drop-before{box-shadow:inset 3px 0 0 var(--accent);}
+  .timeline-seg.drop-after{box-shadow:inset -3px 0 0 var(--accent);}
+  .timeline-seg.is-video::after{
+    content:'▶'; position:absolute; top:2px; left:2px; font-size:8px;
+    color:#fff; background:rgba(0,0,0,0.55); border-radius:50%;
+    width:14px; height:14px; display:flex; align-items:center; justify-content:center;
+  }
+  .timeline-handle{
+    position:absolute; top:0; bottom:0; width:10px; margin-left:-5px;
+    cursor:ew-resize; z-index:3; touch-action:none;
+  }
+  .timeline-handle::before{
+    content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:4px; height:22px; background:var(--handle-grip); border-radius:2px;
+  }
+  .timeline-handle:hover::before, .timeline-handle.active::before{ background:var(--accent); }
+  .timeline-gap{
+    position:relative; height:100%; flex-shrink:0; cursor:grab;
+    background:repeating-linear-gradient(45deg, var(--gap-stripe-a) 0 6px, var(--gap-stripe-b) 6px 12px);
+  }
+  .timeline-gap.dragging-seg{opacity:0.4;}
+  .timeline-handle.drop-target-gap::before{ background:var(--accent); width:6px; }
+  .timeline-gap.gap-consume-target{
+    background:repeating-linear-gradient(45deg, var(--accent) 0 6px, var(--accent-soft) 6px 12px);
+    box-shadow:inset 0 0 0 2px var(--accent);
+  }
+  .gap-drop-marker{ position:absolute; top:0; bottom:0; width:2px; background:var(--accent); pointer-events:none; }
+  .timeline-track.cross-track-hover{ box-shadow:inset 0 0 0 2px var(--ai); background:var(--ai-tint); }
+  .audio-empty{
+    display:flex; align-items:center; justify-content:center; width:100%;
+    font-size:11px; color:var(--text-2); letter-spacing:0;
+  }
+  .timeline-playhead{
+    position:absolute; top:0; bottom:0; width:2px; background:var(--ai);
+    left:0%; box-shadow:0 0 4px var(--ai); z-index:4;
+    cursor:ew-resize; touch-action:none;
+  }
+  .timeline-playhead::after{
+    /* widens the actual draggable hit area well past the visible 2px line,
+       without widening what's drawn */
+    content:''; position:absolute; top:0; bottom:0; left:-8px; right:-8px;
+  }
+  .timeline-playhead::before{
+    content:''; position:absolute; top:-3px; left:50%; transform:translateX(-50%);
+    width:10px; height:10px; border-radius:50%; background:var(--ai);
+  }
+  .exportbar{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  button.primary{
+    background:linear-gradient(135deg, var(--accent-bright), var(--accent));
+    color:var(--on-accent); border:none; font-weight:700;
+    padding:13px 26px; border-radius:999px; cursor:pointer; font-size:14px;
+    font-family:'Space Grotesk',sans-serif;
+    box-shadow:0 10px 24px -10px var(--accent-glow);
+    transition:filter .15s, transform .15s, box-shadow .15s;
+  }
+  button.primary:disabled{opacity:.4; cursor:not-allowed; box-shadow:none;}
+  button.primary:hover:not(:disabled){filter:brightness(1.06); transform:translateY(-1px); box-shadow:0 16px 30px -10px var(--accent-glow);}
+  .progress-wrap{flex:1; min-width:160px;}
+  .progress-track{background:var(--panel-2); height:8px; border-radius:999px; overflow:hidden;}
+  .progress-fill{background:var(--ai); height:100%; width:0%; transition:width .1s linear;}
+  .counter{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); margin-top:6px;}
+  a.download{color:var(--ai-text); font-size:13.5px; font-weight:600;}
+  .hint{font-size:12.5px; line-height:1.6; color:var(--text-2); margin-top:10px;}
+  .warn-text{color:var(--accent-text);}
+  .empty{color:var(--text-2); font-size:13.5px; padding:8px 0;}
+  /* --- Sign-in screen --- */
+  .auth-overlay{
+    position:fixed; inset:0; z-index:200; display:none;
+    align-items:center; justify-content:center; padding:24px;
+    background:
+      radial-gradient(900px 460px at 20% 0%, var(--glow-a), transparent 60%),
+      radial-gradient(760px 420px at 100% 10%, var(--glow-b), transparent 55%),
+      var(--bg);
+  }
+  .auth-overlay.open{display:flex;}
+  .auth-card{
+    width:100%; max-width:380px; background:var(--panel);
+    border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:30px 28px; box-shadow:var(--shadow-card);
+  }
+  .auth-card h2{
+    font-family:'Space Grotesk',sans-serif; font-size:22px; margin:0 0 6px;
+    letter-spacing:-0.01em; text-align:center;
+  }
+  .auth-sub{color:var(--text-2); font-size:14px; margin:0 0 22px; text-align:center; line-height:1.6;}
+  .auth-card label{margin-top:12px;}
+  .auth-card input[type=email], .auth-card input[type=password]{
+    width:100%; background:var(--panel-2); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:10px;
+    font-family:'Inter'; font-size:14px; transition:border-color .15s;
+  }
+  .auth-card input:focus{outline:none; border-color:var(--accent);}
+  .auth-error{color:var(--bad); font-size:12px; margin-top:8px; min-height:15px;}
+  .auth-note{
+    color:var(--muted); font-size:11px; line-height:1.5;
+    margin:18px 0 0; text-align:center;
+  }
+
+  /* --- First-run launcher & pricing --- */
+  .onboard-modal, .pricing-modal{
+    position:fixed; inset:0; z-index:150; display:none;
+    align-items:center; justify-content:center; padding:24px;
+    background:var(--scrim);
+  }
+  .onboard-modal.open, .pricing-modal.open{display:flex;}
+  .onboard-card, .pricing-card{
+    position:relative; width:100%; background:var(--panel);
+    border:1px solid var(--line); border-radius:20px;
+    padding:34px; box-shadow:var(--shadow-card);
+    max-height:calc(100vh - 48px); overflow-y:auto;
+  }
+  .onboard-card{max-width:600px;}
+  .pricing-card{max-width:880px;}
+  .onboard-card h2, .pricing-card h2{
+    font-family:'Space Grotesk',sans-serif; font-size:24px;
+    margin:0 0 6px; text-align:center; letter-spacing:-0.01em;
+  }
+  .onboard-sub{color:var(--text-2); font-size:14px; line-height:1.6; margin:0 0 22px; text-align:center;}
+  .onboard-close{
+    position:absolute; top:16px; right:18px; width:30px; height:30px;
+    border-radius:50%; border:1px solid transparent; background:none;
+    color:var(--muted); font-size:19px; line-height:1; cursor:pointer;
+  }
+  .onboard-close:hover{border-color:var(--line); color:var(--text);}
+  .onboard-drop{
+    border:1.5px dashed var(--line); border-radius:14px; background:var(--panel-2);
+    padding:40px 20px; text-align:center; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .onboard-drop:hover, .onboard-drop.drag{border-color:var(--accent); background:var(--accent-tint-soft);}
+  .onboard-drop-icon{
+    width:52px; height:52px; border-radius:50%; margin:0 auto 12px;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--accent-bright), var(--accent));
+    color:var(--on-accent);
+  }
+  .onboard-drop-title{font-size:16px; font-weight:600; margin-bottom:4px;}
+  .onboard-drop-sub{font-size:13.5px; color:var(--text-2);}
+  .onboard-link{color:var(--accent-text); text-decoration:underline; text-underline-offset:2px;}
+  .onboard-options{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px;}
+  @media (max-width:560px){ .onboard-options{grid-template-columns:1fr;} }
+  .onboard-opt{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px; cursor:pointer; text-align:center; color:var(--text);
+    display:flex; flex-direction:column; gap:10px; align-items:center;
+    transition:border-color .15s, transform .15s;
+  }
+  .onboard-opt:hover{border-color:var(--accent); transform:translateY(-1px);}
+  .onboard-opt-art{
+    width:100%; height:62px; border-radius:10px; display:block;
+    background:linear-gradient(135deg, var(--accent-bright), var(--accent));
+  }
+  .onboard-opt-art.art-video{background:linear-gradient(135deg, var(--ai-bright), var(--ai));}
+  .onboard-opt-art.art-plan{background:linear-gradient(135deg, var(--panel-2), var(--line));}
+  .onboard-opt-label{font-size:13px; font-weight:500;}
+
+  .plan-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:6px;}
+  @media (max-width:860px){ .plan-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:520px){ .plan-grid{grid-template-columns:1fr;} }
+  .plan{
+    position:relative; border:1px solid var(--line); border-radius:16px;
+    padding:20px 18px; background:var(--panel-2); display:flex; flex-direction:column;
+  }
+  .plan.featured{border-color:var(--accent); background:var(--accent-tint-soft);}
+  .plan-badge{
+    position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    background:var(--accent); color:var(--on-accent); font-size:10px;
+    padding:3px 10px; border-radius:999px; white-space:nowrap; font-weight:600;
+  }
+  .plan-name{font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:700; color:var(--accent-text); margin-bottom:6px;}
+  .plan-price{font-family:'Space Grotesk',sans-serif; font-size:24px; font-weight:700; letter-spacing:-0.01em;}
+  .plan-price span{font-size:12px; font-weight:500; color:var(--muted); margin-left:3px;}
+  .plan-feats{list-style:none; margin:14px 0 18px; padding:0; display:flex; flex-direction:column; gap:8px;}
+  .plan-feats li{font-size:13px; color:var(--text-2); line-height:1.5;}
+  .plan-feats li b{color:var(--accent-text); font-weight:700;}
+  .plan.featured .plan-price{color:var(--accent-text);}
+  .plan-cta{margin-top:auto; width:100%;}
+  .plan-tag{
+    margin-top:auto; text-align:center; font-size:12px; padding:8px;
+    border-radius:999px; border:1px dashed var(--line); color:var(--muted);
+  }
+
+  .msgbox{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;display:none;}
+  .msgbox.error{background:rgba(217,99,79,0.12);border:1px solid var(--bad);}
+  .msgbox.warn{background:var(--accent-tint);border:1px solid var(--accent);}
+</style>
+<script>
+// Runs before the body is parsed so a saved dark theme is already applied at
+// first paint — otherwise the page flashes light on every load.
+try{
+  if(localStorage.getItem('vibeCutTheme') === 'dark'){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+}catch(e){}
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="brand-mark">V</span>
+      <span class="brand-name">Vibe Cut</span>
+      <button class="theme-toggle" id="themeToggle" type="button" title="밝은 테마 / 어두운 테마 전환">
+        <span id="themeToggleIcon">☾</span><span id="themeToggleLabel">어둡게</span>
+      </button>
+      <button class="theme-toggle" id="pricingOpen" type="button">요금제</button>
+      <span class="theme-toggle account-chip" id="accountChip" hidden>
+        <span id="accountEmail"></span>
+        <span class="account-signout" id="signOutBtn" role="button" tabindex="0">로그아웃</span>
+      </span>
+    </div>
+    <div class="eyebrow">BUILD 2026-08-29-AI</div>
+    <h1><span class="grad">AI</span>에게 요청하여 나만의 동영상을 손쉽게 만들어보세요</h1>
+    <p>원하는 프롬프트를 입력하거나, 기본으로 설정된 프롬프트를 골라,<br>자신의 <span class="mint">추억을 간직해보세요.</span></p>
+  </header>
+
+  <!-- Wide screens split this into "controls on the left, a preview that
+       stays put on the right" so an AI edit is visible the moment it lands.
+       Below the breakpoint both columns collapse back to one stacked flow. -->
+  <div class="app-layout">
+  <div class="app-col-left">
+
+  <div class="card mode-manual">
+    <h2><span class="num">01</span> 사진 불러오기 <span class="mode-badge manual">수동</span></h2>
+    <div class="dropzone" id="dropzone">
+      <svg class="icon" width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin:0 auto;">
+        <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 16V17.5C4 18.8807 5.11929 20 6.5 20H17.5C18.8807 20 20 18.8807 20 17.5V16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="big">사진이나 영상 파일을 드래그하거나 클릭해서 선택하세요</div>
+      <div class="small">JPG / PNG / MP4 / MOV · 사진은 자동으로 화질 평가가 진행됩니다</div>
+      <input type="file" id="fileInput" accept="image/*,video/*" multiple>
+    </div>
+    <div id="frames" class="frames"></div>
+    <div id="emptyMsg" class="empty">아직 불러온 사진이 없어요.</div>
+    <div id="junctionHint" class="hint" style="display:none;">사진과 사진 사이의 동그란 버튼을 누르면, <b>그 구간에만</b> 다른 전환 효과를 줄 수 있어요. 지정하지 않은 구간은 05번의 기본 전환 효과를 따릅니다.</div>
+  </div>
+
+  <div class="card mode-ai">
+    <h2><span class="num">02</span> AI 사진 선별 <span class="mode-badge ai">AI</span></h2>
+    <p class="card-desc">AI가 사진을 검토해서 눈 감았거나 표정이 부자연스러운 사진, 비슷한(중복) 사진을 걸러냅니다. 조건을 자세히 적을수록 취향에 맞게 골라주고, 비워두면 기본 기준(눈 뜸, 자연스러운 표정, 중복 제거)만 적용됩니다.</p>
+    <div class="preset-intro">자주 쓰는 기준을 골라보세요 (비워두면 기본 기준만 적용돼요)</div>
+    <div class="prompt-presets" id="curatorPresets"></div>
+    <label for="curatorPrompt">선별 기준 (선택사항) <span class="label-hint">(고른 뒤 자유롭게 고쳐도 돼요)</span></label>
+    <textarea id="curatorPrompt" rows="2" placeholder="예: 따뜻한 색감 위주로 골라줘. 비워두면 기본 기준만 적용돼요." style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px; font-family:'Inter'; resize:vertical;"></textarea>
+    <div class="row" style="margin-top:12px;">
+      <div class="field" style="max-width:220px;">
+        <label>목표 장수 (선택사항)</label>
+        <input type="number" id="curatorCount" min="1" placeholder="비워두면 기준 통과분 전체">
+      </div>
+    </div>
+    <div style="margin-top:12px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <button class="primary" id="curatorBtn" disabled>AI로 사진 선별하기</button>
+      <button id="curatorResetBtn" style="background:none;border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:8px 14px;cursor:pointer;font-size:13px;">선별 결과 초기화</button>
+      <span class="hint" id="curatorStatus" style="margin:0;"></span>
+    </div>
+    <div id="curatorSummaryBox" class="msgbox" style="display:none; background:var(--ai-tint); border:1px solid var(--ai); color:var(--text);"></div>
+    <div id="curatorErrorBox" class="msgbox error"></div>
+  </div>
+
+  <div class="card mode-ai">
+    <h2><span class="num">03</span> AI 감독 <span class="mode-badge ai">AI</span></h2>
+    <p class="card-desc">원하는 분위기를 자신의 말로 설명해주세요 — AI가 실제로 사진을 보고 순서·타이밍·전환·색보정을 대신 정해드립니다.</p>
+    <div class="preset-intro">어떻게 써야 할지 모르겠다면, 아래에서 골라 시작해보세요</div>
+    <div class="prompt-presets" id="promptPresets"></div>
+    <label for="aiPrompt">연출 방향 <span class="label-hint">(고른 뒤 자유롭게 고쳐도 돼요)</span></label>
+    <textarea id="aiPrompt" rows="3" placeholder="예: 따뜻하고 감성적인 느낌, 느린 전환, 빈티지 톤으로. 인물 사진을 먼저 보여주고 풍경으로 마무리해줘." style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px; font-family:'Inter'; resize:vertical;"></textarea>
+    <div style="margin-top:12px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <button class="primary" id="aiDirectBtn" disabled>AI에게 편집 요청하기</button>
+      <span class="hint" id="aiStatus" style="margin:0;"></span>
+    </div>
+    <div id="aiSummaryBox" class="msgbox" style="display:none; background:var(--ai-tint); border:1px solid var(--ai); color:var(--text);"></div>
+    <div id="aiErrorBox" class="msgbox error"></div>
+  </div>
+
+  <div class="card mode-manual">
+    <h2><span class="num">04</span> 배경음악 <span class="mode-badge manual">수동</span></h2>
+    <p class="card-desc" style="margin-bottom:4px;">화면 비율·타이밍·전환·색보정은 결과가 바로 보이도록 05번 미리보기 위쪽 툴바로 옮겼어요.</p>
+    <div style="margin-top:16px;">
+      <label class="filebtn" for="audioInput">음악 파일 업로드</label>
+      <input type="file" id="audioInput" accept="audio/*">
+      <span class="filename" id="audioName">선택된 파일 없음</span>
+    </div>
+    <div class="music-links">
+      <a href="https://www.youtube.com/audiolibrary" target="_blank" rel="noopener">YouTube Audio Library ↗</a>
+      <a href="https://pixabay.com/music/" target="_blank" rel="noopener">Pixabay Music ↗</a>
+      <a href="https://freemusicarchive.org/" target="_blank" rel="noopener">Free Music Archive ↗</a>
+      <a href="https://incompetech.com/music/royalty-free/music.html" target="_blank" rel="noopener">Incompetech ↗</a>
+    </div>
+    <div class="hint">무료 저작권 프리 음원 사이트예요 — 마음에 드는 곡을 받아서 위에 업로드하세요.</div>
+  </div>
+
+  </div><!-- /app-col-left -->
+  <div class="col-resizer" id="colResizer" title="드래그해서 편집 화면 크기를 조절하세요"></div>
+  <div class="app-col-right">
+
+  <div class="card mode-manual">
+    <h2><span class="num">05</span> 미리보기 &amp; 내보내기 <span class="mode-badge manual">수동</span></h2>
+    <!-- These four settings are the ones whose effect is only visible in the
+         preview, so they sit directly above it — changing one and seeing the
+         result never costs a scroll. AI may have already filled them in. -->
+    <div class="preview-toolbar">
+      <div class="ptb-field">
+        <label for="aspectRatioMode">화면 비율</label>
+        <select id="aspectRatioMode">
+          <option value="9:16" selected>9:16 (릴스 / 쇼츠 / 틱톡)</option>
+          <option value="4:5">4:5 (인스타그램 피드)</option>
+          <option value="1:1">1:1 (정사각형)</option>
+          <option value="16:9">16:9 (와이드스크린)</option>
+        </select>
+      </div>
+      <div class="ptb-field">
+        <label for="paceMode">타이밍</label>
+        <select id="paceMode">
+          <option value="auto" selected>자동 (약 30~60초)</option>
+          <option value="custom">사진당 초 직접 설정</option>
+        </select>
+      </div>
+      <div class="ptb-field" id="customSecondsField" style="display:none;">
+        <label for="customSeconds">사진당 초</label>
+        <input type="number" id="customSeconds" value="2" min="0.5" max="10" step="0.5">
+      </div>
+      <div class="ptb-field">
+        <label for="transitionMode">전환 효과 <span class="label-hint">(기본)</span></label>
+        <select id="transitionMode">
+          <option value="none">없음 (즉시 전환)</option>
+          <option value="fade" selected>크로스페이드</option>
+          <option value="dissolve">디졸브 (그레인)</option>
+          <option value="cut">하드 컷</option>
+          <option value="wipeleft">왼쪽으로 와이프</option>
+          <option value="slideleft">왼쪽으로 슬라이드</option>
+          <option value="circleopen">원형으로 열기</option>
+          <option value="pixelize">픽셀화</option>
+          <option value="radial">방사형 와이프</option>
+          <option value="kenburns">켄 번즈 (패닝 &amp; 줌)</option>
+        </select>
+      </div>
+      <div class="ptb-field">
+        <label for="colorGradeMode">색보정</label>
+        <select id="colorGradeMode">
+          <option value="none" selected>없음</option>
+          <option value="warm">따뜻하게</option>
+          <option value="cool">차갑게</option>
+          <option value="vintage">빈티지</option>
+          <option value="bw">흑백</option>
+          <option value="vivid">선명하게</option>
+        </select>
+      </div>
+    </div>
+    <div class="filmframe">
+      <div class="sprockets top" id="sprocketsTop"></div>
+      <canvas id="canvas" width="1080" height="1920"></canvas>
+      <div class="sprockets bottom" id="sprocketsBottom"></div>
+    </div>
+    <div class="timeline-controls">
+      <button class="play-btn" id="playPauseBtn" disabled>▶</button>
+      <span class="time-display" id="timeDisplay">00:00 / 00:00</span>
+      <button class="btn-ghost-sm" id="cropCurrentBtn" style="margin-left:auto;" disabled title="지금 보이는 사진의 프레임 위치·줌을 조절해요">⤢ 화면 위치 조절</button>
+      <button class="btn-ghost-sm" id="addCaptionBtn" disabled>+ 자막 추가</button>
+    </div>
+    <div class="timeline-wrap" id="timelineWrap">
+      <div class="timeline-playhead" id="timelinePlayhead"></div>
+      <div class="track-row ruler-row">
+        <div class="track-label mono"></div>
+        <div class="timeline-ruler" id="timelineRuler"></div>
+      </div>
+      <div class="track-row">
+        <div class="track-label mono">텍스트</div>
+        <div class="timeline-track text-track" id="textTrack"></div>
+      </div>
+      <div id="extraClipTracksContainer"></div>
+      <div class="track-row">
+        <div class="track-label mono">
+          <button class="track-add-btn" id="addClipTrackBtn" title="클립 트랙 추가">+</button>
+          클립
+        </div>
+        <div class="timeline-track" id="timelineTrack"></div>
+      </div>
+      <div class="track-row">
+        <div class="track-label mono">
+          <button class="track-add-btn" id="addAudioTrackBtn" title="오디오 트랙 추가">+</button>
+          오디오
+        </div>
+        <div class="timeline-track audio-track" id="audioTrack"></div>
+      </div>
+      <div id="extraAudioTracksContainer"></div>
+    </div>
+    <div class="hint" style="margin-top:6px;">재생 버튼으로 미리보거나 막대를 드래그해 원하는 지점으로 이동하고, 클립 경계선을 드래그해 길이를 조절하세요. 전환 효과는 대략적인 미리보기이며 정확한 효과는 렌더링된 영상에 적용됩니다.</div>
+    <div class="counter" id="frameCounter">— / —</div>
+    <div class="estimate" id="estimateText">사진을 추가하면 예상 영상 길이를 확인할 수 있어요</div>
+    <div class="exportbar">
+      <button class="primary" id="renderBtn" disabled>영상 렌더링</button>
+      <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+      <a class="download" id="downloadLink" style="display:none;">영상 다운로드 ↓</a>
+    </div>
+    <div id="errorBox" class="msgbox error"></div>
+    <div id="warnBox" class="msgbox warn"></div>
+    <div class="hint">렌더링은 이 브라우저 탭이 아니라 로컬 ffmpeg 서버에서 진행돼요 — 렌더링 중에는 다른 앱으로 전환하거나 폰 화면을 꺼도 괜찮아요.</div>
+  </div>
+
+  </div><!-- /app-col-right -->
+  </div><!-- /app-layout -->
+
+</div>
+
+<div class="crop-modal" id="cropModal">
+  <div class="crop-modal-inner">
+    <div class="crop-modal-head">
+      <span>프레임 위치·줌 조절</span>
+      <button class="btn-ghost-sm" id="cropAutoBtn">✨ AI 자동 맞춤</button>
+    </div>
+    <div class="crop-viewport" id="cropViewport">
+      <img id="cropImg" draggable="false">
+    </div>
+    <div class="crop-controls">
+      <span>축소</span>
+      <input type="range" id="cropZoomSlider" min="0.4" max="3" step="0.02" value="1">
+      <span>확대</span>
+    </div>
+    <div id="cropAutoStatus" class="hint" style="margin-top:6px; min-height:14px;"></div>
+    <div class="crop-modal-actions">
+      <button class="btn-ghost-sm" id="cropResetBtn">기본값으로</button>
+      <button class="primary" id="cropCloseBtn" style="padding:8px 18px; font-size:13px;">완료</button>
+    </div>
+  </div>
+</div>
+
+<div class="crop-modal" id="captionModal">
+  <div class="crop-modal-inner">
+    <div class="crop-modal-head">
+      <span>자막 편집</span>
+      <button class="btn-ghost-sm" id="captionDeleteBtn" style="border-color:var(--bad); color:var(--bad);">삭제</button>
+    </div>
+    <textarea id="captionText" rows="2" placeholder="자막 내용을 입력하세요" style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:10px; font-family:'Inter'; resize:vertical;"></textarea>
+    <div class="field" style="margin-top:10px;">
+      <label>템플릿 (눌러서 바로 적용)</label>
+      <div class="caption-template-row" id="captionTemplateRow"></div>
+    </div>
+    <div class="row" style="margin-top:14px;">
+      <div class="field">
+        <label>빠른 위치 이동 (자유롭게 드래그도 가능)</label>
+        <select id="captionPosition">
+          <option value="" selected hidden>이동할 위치 선택</option>
+          <option value="bottom">하단</option>
+          <option value="center">중앙</option>
+          <option value="top">상단</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>색상</label>
+        <input type="color" id="captionColor" value="#ffffff" style="width:100%; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+      </div>
+    </div>
+    <div class="crop-controls">
+      <span>크기</span>
+      <input type="range" id="captionSizeSlider" min="16" max="72" step="1" value="36">
+      <span class="mono" id="captionSizeLabel" style="min-width:34px;">36px</span>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="field">
+        <label>테두리 두께</label>
+        <input type="range" id="captionBorderWidthSlider" min="0" max="10" step="1" value="0">
+      </div>
+      <div class="field">
+        <label>테두리 색상</label>
+        <input type="color" id="captionBorderColor" value="#000000" style="width:100%; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="field">
+        <label>그림자 강도</label>
+        <input type="range" id="captionShadowStrengthSlider" min="0" max="10" step="1" value="0">
+      </div>
+      <div class="field">
+        <label>그림자 색상</label>
+        <input type="color" id="captionShadowColor" value="#000000" style="width:100%; height:38px; padding:2px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px; align-items:center;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); flex:1;">
+        <input type="checkbox" id="captionBoxToggle" checked> 배경 박스
+      </label>
+      <button class="btn-ghost-sm" id="captionSaveTemplateBtn">+ 나만의 템플릿으로 저장</button>
+    </div>
+    <div class="crop-modal-actions">
+      <button class="btn-ghost-sm" id="captionCloseBtn2">취소</button>
+      <button class="primary" id="captionCloseBtn" style="padding:8px 18px; font-size:13px;">완료</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sign-in screen. Deliberately a front-end-only facade: there is no account
+     backend yet, so nothing typed here is transmitted or stored beyond the
+     e-mail, kept in localStorage purely to personalise the header. The notice
+     in the card says so out loud rather than implying security we don't have. -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="brand" style="justify-content:center; margin-bottom:22px;">
+      <span class="brand-mark">V</span>
+      <span class="brand-name">Vibe Cut</span>
+    </div>
+    <h2>사진만 올리면, 영상이 됩니다</h2>
+    <p class="auth-sub">AI가 사진을 고르고 순서·전환·색감까지 정해드려요.</p>
+    <label for="authEmail">이메일</label>
+    <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="username">
+    <label for="authPassword">비밀번호</label>
+    <input type="password" id="authPassword" placeholder="••••••••" autocomplete="current-password">
+    <div id="authError" class="auth-error"></div>
+    <button class="primary" id="authSubmit" style="width:100%; margin-top:16px;">시작하기</button>
+    <button class="btn-ghost-sm" id="authGuest" style="width:100%; margin-top:10px;">로그인 없이 둘러보기</button>
+    <p class="auth-note">데모용 화면입니다. 입력한 정보는 서버로 전송되지 않으며, 비밀번호는 어디에도 저장되지 않습니다.</p>
+  </div>
+</div>
+
+<!-- First-run launcher: gives a brand-new visitor one obvious way to start
+     instead of dropping them into a five-section form. -->
+<div class="onboard-modal" id="onboardModal">
+  <div class="onboard-card">
+    <button class="onboard-close" id="onboardClose" title="닫기">×</button>
+    <h2>영상을 만들어볼까요?</h2>
+    <p class="onboard-sub">간직하고 싶은 사진을 올리면 바로 시작할 수 있어요.</p>
+
+    <div class="onboard-drop" id="onboardDrop">
+      <div class="onboard-drop-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 16V4M12 4L7 9M12 4L17 9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 16v1.5A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5V16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="onboard-drop-title">사진 올리기</div>
+      <div class="onboard-drop-sub"><span class="onboard-link">파일 선택</span> 또는 여기로 끌어다 놓으세요</div>
+    </div>
+
+    <div class="onboard-options">
+      <button class="onboard-opt" id="onboardPhotos">
+        <span class="onboard-opt-art art-photo"></span>
+        <span class="onboard-opt-label">사진으로 시작</span>
+      </button>
+      <button class="onboard-opt" id="onboardVideos">
+        <span class="onboard-opt-art art-video"></span>
+        <span class="onboard-opt-label">영상 클립으로 시작</span>
+      </button>
+      <button class="onboard-opt" id="onboardPricing">
+        <span class="onboard-opt-art art-plan"></span>
+        <span class="onboard-opt-label">요금제 보기</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="pricing-modal" id="pricingModal">
+  <div class="pricing-card">
+    <button class="onboard-close" id="pricingClose" title="닫기">×</button>
+    <h2>요금제</h2>
+    <p class="onboard-sub">미리보기와 편집은 무제한이에요. 완성한 영상을 <b>내보낼 때만</b> 횟수를 사용합니다.</p>
+    <div class="plan-grid">
+      <div class="plan">
+        <div class="plan-name">무료</div>
+        <div class="plan-price">0<span>원</span></div>
+        <ul class="plan-feats">
+          <li>사진 <b>20장</b>까지</li>
+          <li>내보내기 <b>가입 후 2회</b></li>
+          <li>AI 선별·자동 편집 전체 이용</li>
+        </ul>
+        <div class="plan-tag current">현재 이용 중</div>
+      </div>
+      <div class="plan">
+        <div class="plan-name">라이트</div>
+        <div class="plan-price">4,900<span>원/월</span></div>
+        <ul class="plan-feats">
+          <li>사진 <b>50장</b>까지</li>
+          <li>내보내기 <b>주 7회</b></li>
+          <li>자막·배경음악</li>
+        </ul>
+        <button class="btn-ghost-sm plan-cta">선택하기</button>
+      </div>
+      <div class="plan featured">
+        <div class="plan-badge">가장 많이 선택</div>
+        <div class="plan-name">스탠다드</div>
+        <div class="plan-price">14,900<span>원/월</span></div>
+        <ul class="plan-feats">
+          <li>사진 <b>200장</b>까지</li>
+          <li>내보내기 <b>하루 3회</b></li>
+          <li>멀티트랙 편집</li>
+        </ul>
+        <button class="primary plan-cta">선택하기</button>
+      </div>
+      <div class="plan">
+        <div class="plan-name">프로</div>
+        <div class="plan-price">29,900<span>원/월</span></div>
+        <ul class="plan-feats">
+          <li>사진 <b>500장</b>까지</li>
+          <li>내보내기 <b>하루 10회</b></li>
+          <li>우선 렌더링</li>
+        </ul>
+        <button class="btn-ghost-sm plan-cta">선택하기</button>
+      </div>
+    </div>
+    <p class="auth-note" style="text-align:center;">데모 화면이라 결제는 연결되어 있지 않습니다.</p>
+  </div>
+</div>
+
+<script>
+// Detect the classic mistake: opening this file directly (file://) instead
+// of going through the local server. Every AI/render feature calls a
+// relative /api/... endpoint, which only resolves on an http(s) origin —
+// opened as a file it fails with a cryptic "Failed to parse URL" error, so
+// warn clearly up front instead of letting that happen.
+if(location.protocol === 'file:'){
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#e8a33d;color:var(--on-accent);padding:14px 20px;font-family:Inter,sans-serif;font-size:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+  banner.innerHTML = '⚠️ 이 파일을 직접 열어서 보고 있어요 — AI 편집·선별·렌더링 기능이 모두 작동하지 않습니다. 터미널에서 <code style="background:rgba(0,0,0,0.15);padding:1px 5px;border-radius:3px;">npm start</code>로 서버를 켠 뒤, <a href="http://localhost:8787/vibe-cut.html" style="color:var(--on-accent);font-weight:700;">http://localhost:8787/vibe-cut.html</a> 로 접속해주세요.';
+  document.body.prepend(banner);
+  document.body.style.paddingTop = '60px';
+}
+
+const state = { photos: [], extraClipTracks: [], extraAudioTracks: [], captions: [] };
+let captionIdCounter = 0;
+let audioFile = null;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const addClipTrackBtn = document.getElementById('addClipTrackBtn');
+const extraClipTracksContainer = document.getElementById('extraClipTracksContainer');
+const addAudioTrackBtn = document.getElementById('addAudioTrackBtn');
+const extraAudioTracksContainer = document.getElementById('extraAudioTracksContainer');
+const framesEl = document.getElementById('frames');
+const emptyMsg = document.getElementById('emptyMsg');
+const renderBtn = document.getElementById('renderBtn');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const progressFill = document.getElementById('progressFill');
+const downloadLink = document.getElementById('downloadLink');
+const frameCounter = document.getElementById('frameCounter');
+const estimateText = document.getElementById('estimateText');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const timeDisplay = document.getElementById('timeDisplay');
+const timelineTrack = document.getElementById('timelineTrack');
+const timelineWrap = document.getElementById('timelineWrap');
+const timelinePlayhead = document.getElementById('timelinePlayhead');
+const timelineRuler = document.getElementById('timelineRuler');
+const textTrack = document.getElementById('textTrack');
+const addCaptionBtn = document.getElementById('addCaptionBtn');
+const cropCurrentBtn = document.getElementById('cropCurrentBtn');
+const captionModal = document.getElementById('captionModal');
+const captionText = document.getElementById('captionText');
+const captionPosition = document.getElementById('captionPosition');
+const captionColor = document.getElementById('captionColor');
+const captionSizeSlider = document.getElementById('captionSizeSlider');
+const captionSizeLabel = document.getElementById('captionSizeLabel');
+const captionBorderWidthSlider = document.getElementById('captionBorderWidthSlider');
+const captionBorderColor = document.getElementById('captionBorderColor');
+const captionShadowStrengthSlider = document.getElementById('captionShadowStrengthSlider');
+const captionShadowColor = document.getElementById('captionShadowColor');
+const captionBoxToggle = document.getElementById('captionBoxToggle');
+const captionSaveTemplateBtn = document.getElementById('captionSaveTemplateBtn');
+const captionDeleteBtn = document.getElementById('captionDeleteBtn');
+const captionCloseBtn = document.getElementById('captionCloseBtn');
+const captionCloseBtn2 = document.getElementById('captionCloseBtn2');
+const audioInput = document.getElementById('audioInput');
+const audioName = document.getElementById('audioName');
+const paceMode = document.getElementById('paceMode');
+const customSecondsField = document.getElementById('customSecondsField');
+const customSeconds = document.getElementById('customSeconds');
+const errorBox = document.getElementById('errorBox');
+const warnBox = document.getElementById('warnBox');
+const aiPrompt = document.getElementById('aiPrompt');
+const aiDirectBtn = document.getElementById('aiDirectBtn');
+const aiStatus = document.getElementById('aiStatus');
+const aiSummaryBox = document.getElementById('aiSummaryBox');
+const aiErrorBox = document.getElementById('aiErrorBox');
+const colorGradeMode = document.getElementById('colorGradeMode');
+const aspectRatioMode = document.getElementById('aspectRatioMode');
+const ASPECT_RATIOS = {
+  '9:16': { w: 1080, h: 1920 },
+  '4:5':  { w: 1080, h: 1350 },
+  '1:1':  { w: 1080, h: 1080 },
+  '16:9': { w: 1920, h: 1080 }
+};
+aspectRatioMode.addEventListener('change', ()=>{
+  const ar = ASPECT_RATIOS[aspectRatioMode.value];
+  canvas.width = ar.w;
+  canvas.height = ar.h;
+  drawStaticPreview();
+});
+// Fade in/out at start/end of the whole video is decided purely by the AI
+// director from the user's prompt — there is no manual toggle for it.
+let fadeInState = false;
+let fadeOutState = false;
+let currentTransition = 'fade'; // may be set beyond the dropdown's options by the AI (e.g. any ffmpeg xfade name)
+// Must mirror server.js's XFADE_TRANSITIONS — these are ffmpeg's real xfade
+// filter names, not something we hand-implemented, plus our own 'none'/'cut'/'kenburns'.
+const VALID_TRANSITIONS = new Set([
+  'none', 'cut', 'kenburns',
+  'fade', 'fadeblack', 'fadewhite', 'distance', 'wipeleft', 'wiperight', 'wipeup', 'wipedown',
+  'slideleft', 'slideright', 'slideup', 'slidedown', 'smoothleft', 'smoothright', 'smoothup', 'smoothdown',
+  'circlecrop', 'rectcrop', 'circleclose', 'circleopen', 'horzclose', 'horzopen', 'vertclose', 'vertopen',
+  'diagbl', 'diagbr', 'diagtl', 'diagtr', 'hlslice', 'hrslice', 'vuslice', 'vdslice', 'hblur', 'fadegrays',
+  'wipetl', 'wipetr', 'wipebl', 'wipebr', 'squeezeh', 'squeezev', 'zoomin', 'dissolve', 'pixelize', 'radial',
+  'hlwind', 'hrwind', 'vuwind', 'vdwind', 'coverleft', 'coverright', 'coverup', 'coverdown',
+  'revealleft', 'revealright', 'revealup', 'revealdown'
+]);
+let dynamicTransitionOption = null;
+function setTransitionValue(value){
+  currentTransition = value;
+  const select = document.getElementById('transitionMode');
+  const exists = Array.from(select.options).some(o=>o.value===value);
+  if(!exists){
+    if(dynamicTransitionOption) dynamicTransitionOption.remove();
+    dynamicTransitionOption = document.createElement('option');
+    dynamicTransitionOption.value = value;
+    dynamicTransitionOption.textContent = `AI: ${value}`;
+    select.appendChild(dynamicTransitionOption);
+  }
+  select.value = value;
+}
+const curatorPrompt = document.getElementById('curatorPrompt');
+const curatorCount = document.getElementById('curatorCount');
+const curatorBtn = document.getElementById('curatorBtn');
+const curatorResetBtn = document.getElementById('curatorResetBtn');
+const curatorStatus = document.getElementById('curatorStatus');
+const curatorSummaryBox = document.getElementById('curatorSummaryBox');
+const curatorErrorBox = document.getElementById('curatorErrorBox');
+let photoIdCounter = 0;
+let previewPlaying = false;
+let audioWaveformPeaks = null;
+let audioWaveformSourceFile = null;
+let previewRafId = null;
+let previewTime = 0;
+// Video clips draw from their own hidden <video> element instead of a
+// static image — tracks which ones are currently "live" so stopPreviewPlayback
+// (called even on the very first, photo-less page load) can safely pause
+// whichever ones aren't in the current frame. Declared here, not next to
+// drawPreviewFrame/resolveClipSource further down, because drawStaticPreview()
+// -> renderTimelineSegments() -> stopPreviewPlayback() already runs once at
+// page load, before the script would otherwise reach a later declaration.
+let liveVideoEls = new Set();
+
+// Every clip track (the base CLIP track plus any CLIP2/3/... added later)
+// registers itself here so a photo being dragged in one can be dropped
+// into a completely different one — see moveClipBetweenTracks below.
+// Declared this early (rather than beside createClipTrackController) because
+// drawStaticPreview() -> rebuildTimelineDom() -> renderAllClipTracks() runs
+// once during initial page load, before the script reaches that section.
+const clipTrackRegistry = [];
+const clipTrackControllers = [];
+let crossTrackHoverEntry = null;
+
+// User-saved caption templates (color/size/box/border/shadow/position, same
+// shape as the built-in CAPTION_TEMPLATES), persisted across reloads.
+let customCaptionTemplates = [];
+try {
+  const rawCustomTemplates = localStorage.getItem('vibeCutCaptionTemplates');
+  if(rawCustomTemplates) customCaptionTemplates = JSON.parse(rawCustomTemplates);
+} catch(e){ customCaptionTemplates = []; }
+function saveCustomCaptionTemplates(){
+  try { localStorage.setItem('vibeCutCaptionTemplates', JSON.stringify(customCaptionTemplates)); } catch(e){}
+}
+
+function showError(msg){ errorBox.textContent = msg; errorBox.style.display = 'block'; }
+function clearError(){ errorBox.style.display = 'none'; }
+function showWarning(msg){ warnBox.textContent = msg; warnBox.style.display = 'block'; }
+function clearWarning(){ warnBox.style.display = 'none'; }
+
+window.addEventListener('error', e=> showError('예상치 못한 오류: ' + e.message));
+window.addEventListener('unhandledrejection', e=> showError('예상치 못한 오류: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+
+function buildSprockets(){
+  ['sprocketsTop','sprocketsBottom'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.innerHTML='';
+    for(let i=0;i<28;i++){ el.appendChild(document.createElement('span')); }
+  });
+}
+buildSprockets();
+
+// --- pace mode UI ---
+paceMode.addEventListener('change', ()=>{
+  customSecondsField.style.display = paceMode.value==='custom' ? 'block' : 'none';
+  updateEstimate();
+});
+customSeconds.addEventListener('input', updateEstimate);
+document.getElementById('transitionMode').addEventListener('change', (e)=>{ currentTransition = e.target.value; drawStaticPreview(); updateEstimate(); });
+colorGradeMode.addEventListener('change', drawStaticPreview);
+
+function getPerPhoto(n){
+  if(paceMode.value==='custom'){
+    return Math.max(0.5, parseFloat(customSeconds.value) || 2);
+  }
+  return Math.min(4, Math.max(1.5, 60/Math.max(n,1)));
+}
+
+function updateEstimate(){
+  const active = state.photos.filter(p=>p.included);
+  const n = active.length;
+  if(n===0){
+    estimateText.textContent = '사진을 추가하면 예상 영상 길이를 확인할 수 있어요';
+    renderBtn.disabled = true;
+    return;
+  }
+  const { durations, totalDur } = buildTimeline(active);
+  const mins = Math.floor(totalDur/60);
+  const secs = Math.round(totalDur%60);
+  const lenStr = mins>0 ? `${mins}분 ${secs}초` : `${secs}초`;
+  const isAi = active.every(p=>typeof p.duration === 'number');
+  estimateText.textContent = isAi
+    ? `예상 영상 길이: ${lenStr}  (AI 자동 타이밍, 사진 ${n}장)`
+    : `예상 영상 길이: ${lenStr}  (사진 ${n}장 × ${durations[0].toFixed(1)}초)`;
+  renderBtn.disabled = false;
+}
+
+// --- file loading ---
+dropzone.addEventListener('click',()=>{
+  // The launcher narrows this input to photos-only or videos-only; the main
+  // dropzone always takes both, so restore the full filter before opening.
+  fileInput.accept = 'image/*,video/*';
+  fileInput.click();
+});
+dropzone.addEventListener('dragover',e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop',e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+audioInput.addEventListener('change',e=>{
+  audioFile = e.target.files[0] || null;
+  audioName.textContent = audioFile ? audioFile.name : '선택된 파일 없음';
+  renderAudioTrack();
+});
+// The base AUDIO track picks files by clicking its own bar too, exactly
+// like AUDIO2/AUDIO3 do — the "04" uploader stays as a second way in.
+document.getElementById('audioTrack').addEventListener('click', e=>{
+  if(e.target.closest('.timeline-seg-del')) return;
+  audioInput.click();
+});
+
+function handleFiles(fileList){
+  const files = Array.from(fileList).filter(f=>f.type.startsWith('image/') || f.type.startsWith('video/'));
+  files.forEach(file=>{
+    if(file.type.startsWith('video/')){ handleVideoFile(file); return; }
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const scores = scoreImage(img);
+        state.photos.push({
+          id: photoIdCounter++,
+          img, name:file.name,
+          resScore:scores.resScore, sharpScore:scores.sharpScore,
+          colorWarmth:scores.colorWarmth, dHash:scores.dHash,
+          score:scores.total, included:true
+        });
+        finalizeQualityFlags();
+        renderFrames();
+        drawStaticPreview();
+        updateEstimate();
+        updateActionButtons();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// --- Extra CLIP tracks: click "+" as many times as you like to stack
+// another independent sequential photo track (CLIP2, CLIP3, ...), each
+// overlaying everything below it wherever it has content — a gap (or a
+// track ending early) just lets whatever's underneath show through.
+// Every extra track gets its own add/reorder/remove wiring scoped by
+// closure over its own {photos} object and DOM element, so any number of
+// them can coexist without sharing state.
+addClipTrackBtn.addEventListener('click', ()=>createExtraClipTrack());
+
+function createExtraClipTrack(){
+  const track = { photos: [] };
+  state.extraClipTracks.push(track);
+  const trackNumber = state.extraClipTracks.length + 1; // CLIP2, CLIP3, ...
+
+  const row = document.createElement('div');
+  row.className = 'track-row';
+  const label = document.createElement('div');
+  label.className = 'track-label mono';
+  label.textContent = '클립' + trackNumber;
+  const trackEl = document.createElement('div');
+  trackEl.className = 'timeline-track';
+  row.appendChild(label);
+  row.appendChild(trackEl);
+  // Newer tracks stack above older ones (CLIP3 sits above CLIP2), same as
+  // higher-numbered tracks in Premiere — so each new row goes in first.
+  extraClipTracksContainer.prepend(row);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.multiple = true;
+  fileInput.style.display = 'none';
+  row.appendChild(fileInput);
+
+  // Exactly the same controller the base CLIP track runs on, so this track
+  // gets trim handles, black-frame gaps, gap dragging and cross-track moves
+  // with no separate implementation to drift out of sync.
+  const controller = createClipTrackController({
+    trackEl,
+    getPhotos: () => track.photos,
+    setPhotos: (arr) => { track.photos = arr; },
+    isBase: false,
+    fileInput,
+    onChange: () => { drawStaticPreview(); updateEstimate(); }
+  });
+
+  fileInput.addEventListener('change', e=>{
+    const files = Array.from(e.target.files).filter(f=>f.type.startsWith('image/'));
+    files.forEach(file=>{
+      const reader = new FileReader();
+      reader.onload = ev=>{
+        const img = new Image();
+        img.onload = ()=>{
+          track.photos.push({
+            id: photoIdCounter++,
+            img, name:file.name,
+            included:true,
+            duration: getPerPhoto(track.photos.filter(p=>p.included).length+1),
+            gapAfter:0
+          });
+          controller.afterChange();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+
+  controller.afterChange();
+}
+
+// --- Extra AUDIO tracks: same "+" pattern, but each holds a single looped
+// background-music file (like the base AUDIO track already does) rather
+// than a sequence of clips — audio has no z-order, so every track just
+// mixes together additively server-side.
+addAudioTrackBtn.addEventListener('click', ()=>createExtraAudioTrack());
+
+function createExtraAudioTrack(){
+  // trackEl is kept on the track object (not just in this closure) so a
+  // column/window resize can re-rasterise the waveform at the new pixel width.
+  const track = { file:null, waveformPeaks:null, waveformSourceFile:null, trackEl:null };
+  state.extraAudioTracks.push(track);
+  const trackNumber = state.extraAudioTracks.length + 1; // AUDIO2, AUDIO3, ...
+
+  const row = document.createElement('div');
+  row.className = 'track-row';
+  const label = document.createElement('div');
+  label.className = 'track-label mono';
+  label.textContent = '오디오' + trackNumber;
+  const trackEl = document.createElement('div');
+  trackEl.className = 'timeline-track audio-track';
+  track.trackEl = trackEl;
+  row.appendChild(label);
+  row.appendChild(trackEl);
+  extraAudioTracksContainer.appendChild(row);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file'; fileInput.accept = 'audio/*';
+  fileInput.style.display = 'none';
+  row.appendChild(fileInput);
+
+  fileInput.addEventListener('change', async e=>{
+    track.file = e.target.files[0] || null;
+    await renderExtraAudioTrack(track, trackEl);
+  });
+  trackEl.addEventListener('click', e=>{
+    if(e.target.closest('.timeline-seg-del')) return;
+    fileInput.click();
+  });
+
+  renderExtraAudioTrack(track, trackEl);
+}
+
+async function renderExtraAudioTrack(track, trackEl){
+  if(!track.file){
+    trackEl.innerHTML = '<div class="audio-empty mono">클릭해서 오디오 파일을 추가하세요</div>';
+    return;
+  }
+  trackEl.innerHTML = '<canvas></canvas>';
+  const del = document.createElement('div');
+  del.className = 'timeline-seg-del';
+  del.textContent = '×';
+  del.title = '오디오 제거';
+  del.addEventListener('click', e=>{
+    e.stopPropagation();
+    track.file = null; track.waveformPeaks = null; track.waveformSourceFile = null;
+    renderExtraAudioTrack(track, trackEl);
+  });
+  trackEl.appendChild(del);
+  const canvasEl = trackEl.querySelector('canvas');
+  try{
+    if(track.waveformSourceFile !== track.file){
+      track.waveformPeaks = await decodeAudioPeaks(track.file);
+      track.waveformSourceFile = track.file;
+    }
+    const rect = trackEl.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width || 600));
+    const h = 32;
+    canvasEl.width = w; canvasEl.height = h;
+    const cx = canvasEl.getContext('2d');
+    cx.clearRect(0,0,w,h);
+    cx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ai').trim() || '#4fd1c5';
+    cx.globalAlpha = 0.7;
+    const barW = w/track.waveformPeaks.length;
+    track.waveformPeaks.forEach((p,i)=>{
+      const barH = Math.max(1, p*h);
+      cx.fillRect(i*barW, (h-barH)/2, Math.max(1,barW-1), barH);
+    });
+  } catch(e){
+    trackEl.innerHTML = '<div class="audio-empty mono">파형을 그리지 못했어요 (지원 안 되는 오디오 형식일 수 있어요)</div>';
+  }
+}
+
+// Default length of a freshly-dropped video clip, before any trim — matches
+// getPerPhoto's rough per-photo pacing so a first-look sequence doesn't skew
+// long just because one clip happens to be much longer than that.
+const DEFAULT_VIDEO_CLIP_DURATION = 6;
+
+function handleVideoFile(file){
+  const videoEl = document.createElement('video');
+  videoEl.muted = true;
+  videoEl.playsInline = true;
+  videoEl.preload = 'auto';
+  videoEl.src = URL.createObjectURL(file);
+
+  videoEl.addEventListener('loadedmetadata', ()=>{
+    // <video>.width/.height (used by the shared computeCoverRect/drawCover
+    // cover-crop math via img.width/img.height) default to 0 unless set
+    // explicitly — unlike <img>, they don't auto-reflect the intrinsic size.
+    videoEl.width = videoEl.videoWidth;
+    videoEl.height = videoEl.videoHeight;
+    const sourceDuration = videoEl.duration;
+    const inPoint = 0;
+    const outPoint = Math.min(sourceDuration, DEFAULT_VIDEO_CLIP_DURATION);
+    const posterAt = Math.min(0.15, sourceDuration/2);
+    videoEl.currentTime = posterAt;
+    videoEl.addEventListener('seeked', function onSeeked(){
+      videoEl.removeEventListener('seeked', onSeeked);
+      const c = document.createElement('canvas');
+      c.width = videoEl.videoWidth; c.height = videoEl.videoHeight;
+      c.getContext('2d').drawImage(videoEl, 0, 0);
+      const poster = new Image();
+      poster.onload = ()=>{
+        const scores = scoreImage(poster);
+        state.photos.push({
+          id: photoIdCounter++,
+          kind: 'video',
+          img: poster, videoEl, file, name: file.name,
+          sourceDuration, inPoint, outPoint,
+          resScore:scores.resScore, sharpScore:scores.sharpScore,
+          colorWarmth:scores.colorWarmth, dHash:scores.dHash,
+          score:scores.total, included:true,
+          duration: outPoint-inPoint, gapAfter: 0
+        });
+        // A video clip always carries an explicit duration — if the photos
+        // already in the sequence don't (no AI pass, no trim yet), leaving
+        // them undefined would flip buildTimeline's "every clip has a
+        // duration" check false for the WHOLE set and silently discard this
+        // clip's chosen length via uniform-pacing fallback.
+        const active = state.photos.filter(p=>p.included);
+        active.forEach(p=>{ if(typeof p.duration !== 'number') p.duration = getPerPhoto(active.length); });
+        finalizeQualityFlags();
+        renderFrames();
+        drawStaticPreview();
+        updateEstimate();
+        updateActionButtons();
+      };
+      poster.src = c.toDataURL('image/jpeg', 0.88);
+    }, { once:true });
+  }, { once:true });
+}
+
+function scoreImage(img){
+  const w=100, h=Math.round(100*img.height/img.width);
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d');
+  cx.drawImage(img,0,0,w,h);
+  const data = cx.getImageData(0,0,w,h).data;
+  const gray = new Float32Array(w*h);
+  let sumR=0, sumB=0;
+  for(let i=0;i<w*h;i++){
+    const r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+    gray[i] = 0.299*r+0.587*g+0.114*b;
+    sumR += r; sumB += b;
+  }
+  let sum=0, sumSq=0, n=0;
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const idx=y*w+x;
+      const lap = gray[idx-1]+gray[idx+1]+gray[idx-w]+gray[idx+w]-4*gray[idx];
+      sum+=lap; sumSq+=lap*lap; n++;
+    }
+  }
+  const mean = sum/n;
+  const variance = sumSq/n - mean*mean;
+  const sharpScore = Math.sqrt(Math.max(variance,0));
+  const resScore = Math.sqrt(img.width*img.height);
+  const colorWarmth = (sumR - sumB) / (w*h); // >0 warm, <0 cool
+  const dHash = computeDHash(img);
+  return { sharpScore, resScore, total: sharpScore * Math.log10(resScore+10), colorWarmth, dHash };
+}
+
+// Difference hash (dHash): a coarse visual fingerprint used to detect
+// near-duplicate photos (e.g. burst shots) without calling the AI.
+function computeDHash(img){
+  const w=9, h=8;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const cx=c.getContext('2d');
+  cx.drawImage(img,0,0,w,h); // intentionally squashed to a fixed grid
+  const data = cx.getImageData(0,0,w,h).data;
+  const gray = new Float32Array(w*h);
+  for(let i=0;i<w*h;i++){
+    gray[i] = 0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2];
+  }
+  let bits = '';
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w-1;x++){
+      bits += gray[y*w+x] < gray[y*w+x+1] ? '1' : '0';
+    }
+  }
+  return bits; // 64-character binary string
+}
+
+function hammingDistance(a, b){
+  let dist = 0;
+  for(let i=0;i<a.length;i++){ if(a[i]!==b[i]) dist++; }
+  return dist;
+}
+
+function finalizeQualityFlags(){
+  if(state.photos.length===0) return;
+  const scores = state.photos.map(p=>p.score).sort((a,b)=>a-b);
+  const mid = scores[Math.floor(scores.length/2)];
+  const threshold = mid * 0.35;
+  state.photos.forEach(p=>{
+    p.lowQuality = p.score < threshold && state.photos.length > 3;
+    if(p.included === undefined) p.included = !p.lowQuality;
+  });
+}
+
+// Options offered in the manual per-pair transition picker (a curated
+// subset of VALID_TRANSITIONS — real ffmpeg xfade names, plus none/cut).
+// Ken Burns is deliberately excluded here: it's a per-photo pan/zoom
+// property (p.kenBurns), not a between-photo transition style.
+const JUNCTION_TRANSITION_OPTIONS = [
+  { v:'', t:'+' },
+  { v:'none', t:'없음' },
+  { v:'cut', t:'컷' },
+  { v:'fade', t:'페이드' },
+  { v:'dissolve', t:'디졸브' },
+  { v:'wipeleft', t:'와이프' },
+  { v:'slideleft', t:'슬라이드' },
+  { v:'circleopen', t:'서클' },
+  { v:'pixelize', t:'픽셀' },
+  { v:'radial', t:'레이디얼' }
+];
+
+// --- crop editor: drag-to-pan + zoom slider, with an optional one-shot AI
+// subject-detection call to set a starting focus point. cropFocus lives on
+// the photo object and is read by computeCoverRect() everywhere a photo is
+// framed (live preview, scrub timeline, and the JPEG sent to the renderer).
+const cropModal = document.getElementById('cropModal');
+const cropViewport = document.getElementById('cropViewport');
+const cropImg = document.getElementById('cropImg');
+const cropZoomSlider = document.getElementById('cropZoomSlider');
+const cropAutoBtn = document.getElementById('cropAutoBtn');
+const cropAutoStatus = document.getElementById('cropAutoStatus');
+const cropResetBtn = document.getElementById('cropResetBtn');
+const cropCloseBtn = document.getElementById('cropCloseBtn');
+let cropTarget = null;
+
+function openCropEditor(photo){
+  cropTarget = photo;
+  if(!photo.cropFocus) photo.cropFocus = { x:0.5, y:0.5, zoom:1 };
+  cropAutoStatus.textContent = '';
+  cropViewport.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
+  cropImg.src = photo.img.src;
+  cropZoomSlider.value = photo.cropFocus.zoom;
+  cropModal.classList.add('open');
+  requestAnimationFrame(layoutCropImage);
+}
+
+function layoutCropImage(){
+  if(!cropTarget) return;
+  const vw = cropViewport.clientWidth, vh = cropViewport.clientHeight;
+  const iw = cropTarget.img.naturalWidth || cropTarget.img.width;
+  const ih = cropTarget.img.naturalHeight || cropTarget.img.height;
+  const baseScale = Math.max(vw/iw, vh/ih);
+  const rawZoom = cropTarget.cropFocus.zoom || 1;
+  const zoom = Math.max(1, rawZoom);
+  const scale = baseScale*zoom;
+  const dispW = iw*scale, dispH = ih*scale;
+  let left = vw/2 - cropTarget.cropFocus.x*iw*scale;
+  let top = vh/2 - cropTarget.cropFocus.y*ih*scale;
+  left = Math.min(0, Math.max(vw-dispW, left));
+  top = Math.min(0, Math.max(vh-dispH, top));
+  cropImg.style.width = dispW+'px';
+  cropImg.style.height = dispH+'px';
+  cropImg.style.left = left+'px';
+  cropImg.style.top = top+'px';
+  // zoom < 1 doesn't crop in tighter — there's nothing more of the image
+  // to reveal past a full cover-fit — it shrinks the whole framed image so
+  // it no longer fills the frame, letterboxed by the viewport's own black
+  // background, matching how the live preview/export render it.
+  const shrink = Math.min(1, rawZoom);
+  cropImg.style.transform = shrink < 1 ? `scale(${shrink})` : '';
+}
+
+let cropDragging=false, cropDragStartX=0, cropDragStartY=0, cropStartFocus=null;
+cropViewport.addEventListener('pointerdown', e=>{
+  if(!cropTarget) return;
+  cropDragging = true;
+  cropViewport.classList.add('dragging');
+  cropDragStartX = e.clientX; cropDragStartY = e.clientY;
+  cropStartFocus = { ...cropTarget.cropFocus };
+  cropViewport.setPointerCapture(e.pointerId);
+});
+cropViewport.addEventListener('pointermove', e=>{
+  if(!cropDragging || !cropTarget) return;
+  const vw = cropViewport.clientWidth, vh = cropViewport.clientHeight;
+  const iw = cropTarget.img.naturalWidth || cropTarget.img.width;
+  const ih = cropTarget.img.naturalHeight || cropTarget.img.height;
+  const baseScale = Math.max(vw/iw, vh/ih);
+  const zoom = Math.max(1, cropTarget.cropFocus.zoom||1);
+  const scale = baseScale*zoom;
+  const dx = e.clientX-cropDragStartX, dy = e.clientY-cropDragStartY;
+  cropTarget.cropFocus.x = Math.min(1, Math.max(0, cropStartFocus.x - dx/(iw*scale)));
+  cropTarget.cropFocus.y = Math.min(1, Math.max(0, cropStartFocus.y - dy/(ih*scale)));
+  layoutCropImage();
+});
+cropViewport.addEventListener('pointerup', ()=>{ cropDragging=false; cropViewport.classList.remove('dragging'); });
+cropViewport.addEventListener('pointercancel', ()=>{ cropDragging=false; cropViewport.classList.remove('dragging'); });
+
+cropZoomSlider.addEventListener('input', ()=>{
+  if(!cropTarget) return;
+  const zoom = parseFloat(cropZoomSlider.value);
+  cropTarget.cropFocus.zoom = zoom;
+  // Panning only means something while cropping in tighter than the full
+  // frame — once shrinking below that, there's no overflow left to pan
+  // around, so re-center to keep the shrink centered in the frame.
+  if(zoom < 1){ cropTarget.cropFocus.x = 0.5; cropTarget.cropFocus.y = 0.5; }
+  layoutCropImage();
+});
+
+cropResetBtn.addEventListener('click', ()=>{
+  if(!cropTarget) return;
+  cropTarget.cropFocus = { x:0.5, y:0.5, zoom:1 };
+  cropZoomSlider.value = 1;
+  cropAutoStatus.textContent = '';
+  layoutCropImage();
+});
+
+cropCloseBtn.addEventListener('click', ()=>{
+  cropModal.classList.remove('open');
+  cropTarget = null;
+  renderFrames();
+  drawStaticPreview();
+});
+
+async function autoFrameCurrentCrop(){
+  if(!cropTarget) return;
+  cropAutoBtn.disabled = true;
+  cropAutoStatus.textContent = 'AI가 피사체 위치를 분석하는 중...';
+  try{
+    const thumb = makeThumbnailBase64(cropTarget.img, 320);
+    const arLabel = aspectRatioMode.value;
+    const content = [
+      { type:'text', text:
+        `You are helping crop a photo to fit a ${arLabel} aspect ratio frame without cutting off the main subject. ` +
+        `Identify the single most important subject (a face, a person, or the main object of interest). ` +
+        `Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this schema: ` +
+        `{"x":number,"y":number,"reason":"a short Korean phrase naming what you focused on"}. ` +
+        `"x" and "y" are normalized 0-1 coordinates (0,0 = top-left, 1,1 = bottom-right) of the CENTER of the main subject. If there is no single clear subject, use 0.5,0.5.`
+      },
+      { type:'image', mediaType:'image/jpeg', data: thumb }
+    ];
+    const response = await fetch('/api/ai-direct', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ content, maxOutputTokens: 300 })
+    });
+    const data = await response.json();
+    if(!response.ok) throw new Error(data.error || `API 요청 실패 (${response.status})`);
+    const parsed = extractJson(data.text);
+    if(typeof parsed.x !== 'number' || typeof parsed.y !== 'number') throw new Error('AI 응답 형식이 올바르지 않아요.');
+    cropTarget.cropFocus.x = Math.min(1, Math.max(0, parsed.x));
+    cropTarget.cropFocus.y = Math.min(1, Math.max(0, parsed.y));
+    layoutCropImage();
+    cropAutoStatus.textContent = parsed.reason ? `✨ ${parsed.reason}` : '✨ 자동으로 맞췄어요.';
+  } catch(e){
+    cropAutoStatus.textContent = 'AI 자동 맞춤 실패: ' + (e && e.message ? e.message : e);
+  } finally {
+    cropAutoBtn.disabled = false;
+  }
+}
+cropAutoBtn.addEventListener('click', autoFrameCurrentCrop);
+
+function isCropCustomized(p){
+  const f = p.cropFocus;
+  if(!f) return false;
+  return Math.abs((f.zoom||1)-1)>0.001 || Math.abs((f.x??0.5)-0.5)>0.001 || Math.abs((f.y??0.5)-0.5)>0.001;
+}
+
+function renderFrames(){
+  emptyMsg.style.display = state.photos.length ? 'none' : 'block';
+  // The AI curator re-renders this strip after every batch so its progress is
+  // visible live — without this the strip would snap back to the far left on
+  // each repaint, yanking the photos out from under the user mid-run.
+  const keepScrollLeft = framesEl.scrollLeft;
+  framesEl.innerHTML='';
+  state.photos.forEach((p,i)=>{
+    const div = document.createElement('div');
+    div.className = 'frame' + (p.included ? '' : ' excluded') + (p.curatorPending ? ' pending' : '');
+    div.title = p.curatorReason || '';
+    div.innerHTML = `
+      <img src="${p.img.src}">
+      <span class="badge ${p.lowQuality ? 'low':'good'}">${p.lowQuality ? 'soft' : 'sharp'}</span>
+      ${p.curatorPending
+        ? `<span class="badge pending-badge" style="left:auto; right:5px;">검토중</span>`
+        : (p.curatorReason ? `<span class="badge low" style="left:auto; right:5px;">${p.curatorReason}</span>` : '')}
+      <button class="crop-btn" data-act="crop" data-i="${i}" title="프레임 위치·줌 조절">⤢${isCropCustomized(p) ? ' ✓' : ''}</button>
+      <div class="ctrl">
+        <button data-act="up" data-i="${i}">↑</button>
+        <span class="toggle" data-act="toggle" data-i="${i}">${p.included?'included':'excluded'}</span>
+        <button data-act="down" data-i="${i}">↓</button>
+      </div>
+    `;
+    framesEl.appendChild(div);
+
+    // A junction picker connects this photo to the NEXT INCLUDED photo
+    // (skipping over any excluded ones in between) — that's the actual cut
+    // that will appear in the rendered video, regardless of raw array order.
+    if(p.included){
+      let nextIncluded = null;
+      for(let j=i+1;j<state.photos.length;j++){ if(state.photos[j].included){ nextIncluded = state.photos[j]; break; } }
+      if(nextIncluded){
+        const current = p.transitionAfter || '';
+        const junction = document.createElement('div');
+        junction.className = 'junction';
+        junction.title = current ? `이 구간 전환: ${JUNCTION_TRANSITION_OPTIONS.find(o=>o.v===current)?.t || current}` : '클릭하면 이 구간만 다른 전환 효과로 설정할 수 있어요';
+        junction.innerHTML = `
+          <select class="junction-select ${current ? 'custom' : ''}" data-photo-id="${p.id}">
+            ${JUNCTION_TRANSITION_OPTIONS.map(opt=>`<option value="${opt.v}" ${current===opt.v?'selected':''}>${opt.t}</option>`).join('')}
+          </select>
+        `;
+        framesEl.appendChild(junction);
+      }
+    }
+  });
+  framesEl.scrollLeft = keepScrollLeft;
+  // The per-pair transition control only exists once there are two photos to
+  // sit between, so its explanation appears on the same condition.
+  const junctionHint = document.getElementById('junctionHint');
+  if(junctionHint){
+    junctionHint.style.display = state.photos.filter(p=>p.included).length > 1 ? 'block' : 'none';
+  }
+}
+
+framesEl.addEventListener('change', e=>{
+  const sel = e.target.closest('.junction-select');
+  if(!sel) return;
+  const photoId = parseInt(sel.dataset.photoId);
+  const photo = state.photos.find(p=>p.id===photoId);
+  if(!photo) return;
+  photo.transitionAfter = sel.value || null;
+  renderFrames(); // rebuild so the pill width/color/tooltip reflect the new state
+});
+
+framesEl.addEventListener('click', e=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const i = parseInt(el.dataset.i);
+  const act = el.dataset.act;
+  if(act==='toggle'){
+    state.photos[i].included = !state.photos[i].included;
+    if(state.photos[i].included) state.photos[i].curatorReason = null;
+  }
+  if(act==='up' && i>0){ [state.photos[i-1],state.photos[i]] = [state.photos[i],state.photos[i-1]]; }
+  if(act==='down' && i<state.photos.length-1){ [state.photos[i+1],state.photos[i]] = [state.photos[i],state.photos[i+1]]; }
+  if(act==='crop'){ openCropEditor(state.photos[i]); return; }
+  renderFrames();
+  drawStaticPreview();
+  updateEstimate();
+  updateActionButtons();
+});
+
+function updateActionButtons(){
+  aiDirectBtn.disabled = state.photos.filter(p=>p.included).length===0;
+  curatorBtn.disabled = state.photos.length===0;
+}
+
+// --- canvas preview & drawing ---
+const COLOR_GRADES = {
+  none: '',
+  warm: 'sepia(0.25) saturate(1.3) hue-rotate(-8deg) brightness(1.05)',
+  cool: 'saturate(1.1) hue-rotate(10deg) brightness(0.98) contrast(1.05)',
+  vintage: 'sepia(0.35) contrast(0.9) brightness(1.05) saturate(0.85)',
+  bw: 'grayscale(1) contrast(1.1)',
+  vivid: 'saturate(1.5) contrast(1.15)'
+};
+
+// Cover-crop source rect for an image into a w:h frame, anchored on a
+// normalized focus point (cropFocus.x/y, 0-1, default dead-center) with an
+// optional extra zoom-in around that point. cropFocus is how the manual
+// crop editor and the AI auto-framer both express "where to point the frame".
+function computeCoverRect(img, w, h, cropFocus){
+  const ir = img.width/img.height, fr = w/h;
+  const focus = cropFocus || { x:0.5, y:0.5, zoom:1 };
+  const zoom = Math.max(1, focus.zoom || 1);
+  let sw, sh;
+  if(ir>fr){ sh=img.height; sw=sh*fr; }
+  else{ sw=img.width; sh=sw/fr; }
+  sw = sw/zoom; sh = sh/zoom;
+  const maxX = Math.max(0, img.width-sw), maxY = Math.max(0, img.height-sh);
+  const sx = Math.max(0, Math.min(maxX, (focus.x??0.5)*img.width - sw/2));
+  const sy = Math.max(0, Math.min(maxY, (focus.y??0.5)*img.height - sh/2));
+  return { sx, sy, sw, sh };
+}
+
+function drawCover(img, x, y, w, h, alpha, kb, progress01, cropFocus){
+  let { sx, sy, sw, sh } = computeCoverRect(img, w, h, cropFocus);
+
+  if(kb){
+    const scale = kb.zoomFrom + (kb.zoomTo-kb.zoomFrom) * (progress01||0);
+    const newSw = sw/scale, newSh = sh/scale;
+    const panX = (kb.panX||0) * (progress01||0);
+    const panY = (kb.panY||0) * (progress01||0);
+    sx = sx + (sw-newSw)/2 + panX*sw;
+    sy = sy + (sh-newSh)/2 + panY*sh;
+    sw = newSw; sh = newSh;
+    sx = Math.max(0, Math.min(img.width-sw, sx));
+    sy = Math.max(0, Math.min(img.height-sh, sy));
+  }
+
+  // A crop zoom below 1 doesn't crop in tighter — there's nothing more of
+  // the source to reveal past a full cover-fit — it shrinks the drawn
+  // image within the frame instead, leaving letterbox bars (the canvas is
+  // already cleared to black before this runs).
+  const shrink = Math.min(1, (cropFocus && cropFocus.zoom) || 1);
+  let dx = x, dy = y, dw = w, dh = h;
+  if(shrink < 1){
+    dw = w*shrink; dh = h*shrink;
+    dx = x + (w-dw)/2; dy = y + (h-dh)/2;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.filter = COLOR_GRADES[colorGradeMode.value] || '';
+  ctx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
+  ctx.restore();
+}
+
+function drawStaticPreview(){
+  const active = state.photos.filter(p=>p.included);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  if(active.length===0){
+    ctx.fillStyle = '#8a8790';
+    ctx.font = '28px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('사진을 추가하면 미리보기가 나타나요', canvas.width/2, canvas.height/2);
+    frameCounter.textContent = '— / —';
+    renderTimelineSegments();
+    return;
+  }
+  // Repaint the moment the playhead is actually on, and keep it there.
+  //
+  // This is called after crop / colour grade / aspect ratio / AI passes, none
+  // of which move the playhead conceptually. It used to draw active[0] and
+  // then call renderTimelineSegments(), which exists to reset playback to the
+  // start on a STRUCTURAL change — so every one of those edits threw the user
+  // back to 0:00 and the first clip. rebuildTimelineDom() does the same
+  // rebuild while clamping instead of resetting.
+  stopPreviewPlayback(); // an edit still interrupts playback; it just doesn't rewind
+  const master = masterTimelineDuration();
+  if(master > 0){
+    previewTime = Math.max(0, Math.min(master, previewTime || 0));
+    const { durations, gaps, starts } = buildTimeline(active);
+    drawPreviewFrame(previewTime, active, durations, gaps, starts, master);
+    rebuildTimelineDom();
+    return;
+  }
+  const kb = active[0].kenBurns;
+  drawCover(active[0].img, 0, 0, canvas.width, canvas.height, 1, kb, 0, active[0].cropFocus);
+  frameCounter.textContent = `001 / ${String(active.length).padStart(3,'0')}`;
+  drawExtraClipTracksOverlay(previewTime||0);
+  drawCaptionsAt(previewTime||0);
+  rebuildTimelineDom();
+}
+
+// Each extra CLIP track is an independent sequence that draws on top of
+// everything drawn so far wherever it has content — a gap (or a track
+// having ended) just lets whatever's underneath show through unchanged.
+// Later entries (CLIP3) are drawn after earlier ones (CLIP2), so they
+// visually win on overlap, same as higher-numbered tracks in Premiere.
+function drawExtraClipTracksOverlay(t){
+  state.extraClipTracks.forEach(track=>{
+    const active = track.photos.filter(p=>p.included);
+    if(active.length===0) return;
+    const { durations, gaps, starts, totalDur } = buildTimeline(active);
+    if(t >= totalDur) return;
+    const loc = locateOnTimeline(t, durations, gaps, starts);
+    if(loc.inGap) return;
+    drawCover(active[loc.idx].img, 0, 0, canvas.width, canvas.height, 1, active[loc.idx].kenBurns, 0, active[loc.idx].cropFocus);
+  });
+}
+drawStaticPreview();
+updateEstimate();
+
+// --- timeline helper: supports uniform pacing or AI-assigned per-photo durations ---
+// "gaps[i]" is blank/black screen time inserted right after photo i, before
+// the next photo starts — this is what a Premiere-style trim produces when
+// you shorten a clip: the freed time becomes a gap, later clips do NOT move
+// to fill it. "starts[i]" is photo i's absolute start time on the timeline.
+function buildTimeline(active){
+  const hasAiDurations = active.length>0 && active.every(p=>typeof p.duration === 'number');
+  const durations = hasAiDurations ? active.map(p=>p.duration) : active.map(()=>getPerPhoto(active.length));
+  const gaps = active.map(p=>Math.max(0, p.gapAfter||0));
+  const starts = [];
+  let t = 0;
+  for(let i=0;i<active.length;i++){
+    starts.push(t);
+    t += durations[i] + gaps[i];
+  }
+  return { durations, gaps, starts, totalDur: t };
+}
+
+// Finds what's playing at time t: either a photo (with its own local
+// progress) or a gap (blank screen) following a given photo.
+function locateOnTimeline(t, durations, gaps, starts){
+  for(let i=0;i<durations.length;i++){
+    const photoEnd = starts[i]+durations[i];
+    if(t < photoEnd) return { idx:i, inGap:false, localT: t-starts[i] };
+    const gapEnd = photoEnd + gaps[i];
+    if(t < gapEnd) return { idx:i, inGap:true, localT: t-photoEnd };
+  }
+  const last = durations.length-1;
+  return { idx:last, inGap:false, localT: durations[last]||0 };
+}
+
+// --- manual scrub timeline: a playable, draggable preview of the edit.
+// This is a rough on-screen approximation only (simple crossfade vs. hard
+// cut) — the actual export always uses the exact ffmpeg transition chosen
+// per cut; canvas can't redraw all 54 of those live.
+function formatTime(s){
+  s = Math.max(0, s);
+  const m = Math.floor(s/60);
+  const sec = Math.floor(s%60);
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// Rebuilds the segment/gap/handle DOM to match current state, WITHOUT
+// touching playback position — safe to call repeatedly during a trim drag.
+function rebuildTimelineDom(){
+  const active = state.photos.filter(p=>p.included);
+  const master = masterTimelineDuration();
+  playPauseBtn.disabled = active.length===0;
+  if(master<=0) previewTime = 0;
+  else if(previewTime > master) previewTime = master; // clamp rather than reset if trimming shrank the total
+  // Every clip track (base + CLIP2/3/...) redraws against the same master
+  // scale, so a clip at 0:05 on one track lines up with 0:05 on the others.
+  renderAllClipTracks();
+  renderTimelineRuler(master);
+  updatePlayheadUI(master);
+  renderAudioTrack();
+  renderTextTrack();
+}
+
+// --- Draggable divider between the controls column and the editor column ---
+//
+// Track widths, clip widths and caption blocks are all percentage-based, so
+// they reflow on their own. What does NOT is anything rasterised or placed in
+// pixels: every audio waveform is drawn into a canvas sized to its track's
+// pixel width, and the playhead is positioned in px. Both are refreshed here,
+// which also fixes plain window resizing (previously nothing listened for it).
+const appLayout = document.querySelector('.app-layout');
+const colResizer = document.getElementById('colResizer');
+const RIGHT_COL_MIN = 380;  // below this the timeline stops being usable
+const LEFT_COL_MIN = 320;   // keep the controls column readable
+const RESIZER_GUTTER = 36;  // 8px handle + the two 14px grid gaps
+
+function refreshWidthDependentUI(){
+  renderTimelineSegments();
+  state.extraAudioTracks.forEach(t=>{
+    if(t.trackEl) renderExtraAudioTrack(t, t.trackEl);
+  });
+}
+
+function setRightColWidth(px, persist){
+  if(!Number.isFinite(px)) return null;
+  const layoutW = appLayout.getBoundingClientRect().width;
+  const maxRight = Math.max(RIGHT_COL_MIN, layoutW - LEFT_COL_MIN - RESIZER_GUTTER);
+  const w = Math.round(Math.min(maxRight, Math.max(RIGHT_COL_MIN, px)));
+  appLayout.style.setProperty('--right-col', w + 'px');
+  if(persist){ try{ localStorage.setItem('vibeCutRightCol', String(w)); }catch(e){} }
+  return w;
+}
+
+// A width saved on a wide monitor must not squeeze the controls column shut
+// when the same browser is later opened narrow, so restoring goes through the
+// same clamp as a live drag.
+try{
+  const saved = parseInt(localStorage.getItem('vibeCutRightCol'), 10);
+  if(Number.isFinite(saved)) setRightColWidth(saved, false);
+}catch(e){}
+
+let colResizing = false;
+colResizer.addEventListener('pointerdown', e=>{
+  colResizing = true;
+  colResizer.classList.add('dragging');
+  colResizer.setPointerCapture(e.pointerId);
+  document.body.style.cursor = 'col-resize';
+  e.preventDefault(); // otherwise the drag starts a text selection
+});
+colResizer.addEventListener('pointermove', e=>{
+  if(!colResizing) return;
+  // The column is measured from the layout's right edge, so the handle tracks
+  // the cursor exactly regardless of where the page is scrolled.
+  setRightColWidth(appLayout.getBoundingClientRect().right - e.clientX, false);
+  updatePlayheadUI(masterTimelineDuration()); // cheap; keeps the head glued to the ruler mid-drag
+});
+function endColResize(){
+  if(!colResizing) return;
+  colResizing = false;
+  colResizer.classList.remove('dragging');
+  document.body.style.cursor = '';
+  // Persist what the column actually ended up at (measuring the element
+  // rather than the variable also covers a click that never moved).
+  setRightColWidth(document.querySelector('.app-col-right').getBoundingClientRect().width, true);
+  // Waveforms are expensive to re-rasterise, so they wait for the drag to end.
+  refreshWidthDependentUI();
+}
+colResizer.addEventListener('pointerup', endColResize);
+colResizer.addEventListener('pointercancel', endColResize);
+// Double-click restores the default split.
+colResizer.addEventListener('dblclick', ()=>{
+  appLayout.style.removeProperty('--right-col');
+  try{ localStorage.removeItem('vibeCutRightCol'); }catch(e){}
+  refreshWidthDependentUI();
+});
+
+// --- Light / dark theme ---
+//
+// Everything visual is driven by the CSS variables on :root, so switching is
+// just an attribute flip. The exceptions are the things painted into canvases
+// (audio waveforms, caption template thumbnails, the preview placeholder),
+// which sample their colours at draw time and so have to be redrawn.
+const themeToggle = document.getElementById('themeToggle');
+const themeToggleIcon = document.getElementById('themeToggleIcon');
+const themeToggleLabel = document.getElementById('themeToggleLabel');
+
+function syncThemeToggleLabel(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  // The button advertises what it will switch TO, not the current state.
+  themeToggleIcon.textContent = isDark ? '☀' : '☾';
+  themeToggleLabel.textContent = isDark ? '밝게' : '어둡게';
+}
+syncThemeToggleLabel();
+
+themeToggle.addEventListener('click', ()=>{
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(isDark) document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme','dark');
+  try{ localStorage.setItem('vibeCutTheme', isDark ? 'light' : 'dark'); }catch(e){}
+  syncThemeToggleLabel();
+  drawStaticPreview();
+  refreshWidthDependentUI();
+  renderCaptionTemplates();
+});
+
+let resizeDebounce = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeDebounce);
+  resizeDebounce = setTimeout(()=>{
+    // Re-clamp first: shrinking the window can push a previously valid split
+    // past the point where the controls column still fits.
+    setRightColWidth(document.querySelector('.app-col-right').getBoundingClientRect().width, false);
+    refreshWidthDependentUI();
+  }, 120);
+});
+
+// Picks a "nice" tick interval (in seconds) so a timeline of any length
+// ends up with roughly 5-10 labeled ticks — the same idea Premiere's own
+// ruler uses to relabel itself as you zoom in or out.
+function pickRulerInterval(totalDur){
+  const steps = [1,2,5,10,15,30,60,120,300,600,900,1800,3600];
+  for(const s of steps){ if(totalDur/s <= 10) return s; }
+  return 3600;
+}
+
+function renderTimelineRuler(totalDur){
+  timelineRuler.innerHTML = '';
+  if(!(totalDur>0)) return;
+  const interval = pickRulerInterval(totalDur);
+  for(let t=0; t<=totalDur+0.001; t+=interval){
+    const pct = Math.min(100, t/totalDur*100);
+    const tick = document.createElement('div');
+    tick.className = 'ruler-tick';
+    tick.style.left = pct + '%';
+    const label = document.createElement('span');
+    label.textContent = formatTime(t);
+    tick.appendChild(label);
+    timelineRuler.appendChild(tick);
+  }
+}
+
+// Structural change (photos added/removed/reordered) — resets playback to
+// the start and rebuilds. Trimming uses rebuildTimelineDom() directly so
+// dragging a handle doesn't keep snapping the playhead back to 0.
+function renderTimelineSegments(){
+  stopPreviewPlayback();
+  previewTime = 0;
+  rebuildTimelineDom();
+}
+
+// --- audio waveform track: purely visual, decoded once per File via the
+// Web Audio API and cached until a different file is uploaded.
+
+async function decodeAudioPeaks(file){
+  const arrayBuffer = await file.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AC();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const channel = audioBuffer.getChannelData(0);
+  const samples = 200;
+  const blockSize = Math.max(1, Math.floor(channel.length/samples));
+  const peaks = [];
+  for(let i=0;i<samples;i++){
+    let max = 0;
+    const start = i*blockSize;
+    for(let j=0;j<blockSize;j++){
+      const v = Math.abs(channel[start+j] || 0);
+      if(v>max) max = v;
+    }
+    peaks.push(max);
+  }
+  audioCtx.close();
+  return peaks;
+}
+
+async function renderAudioTrack(){
+  const audioTrackEl = document.getElementById('audioTrack');
+  if(!audioFile){
+    audioWaveformPeaks = null;
+    audioWaveformSourceFile = null;
+    audioTrackEl.innerHTML = '<div class="audio-empty mono">클릭해서 오디오 파일을 추가하세요 (04번에서 올려도 됩니다)</div>';
+    return;
+  }
+  audioTrackEl.innerHTML = '<canvas></canvas>';
+  const del = document.createElement('div');
+  del.className = 'timeline-seg-del';
+  del.textContent = '×';
+  del.title = '오디오 제거';
+  del.addEventListener('click', e=>{
+    e.stopPropagation();
+    audioFile = null;
+    audioName.textContent = '선택된 파일 없음';
+    renderAudioTrack();
+  });
+  audioTrackEl.appendChild(del);
+  const canvasEl = audioTrackEl.querySelector('canvas');
+  try{
+    if(audioWaveformSourceFile !== audioFile){
+      audioWaveformPeaks = await decodeAudioPeaks(audioFile);
+      audioWaveformSourceFile = audioFile;
+    }
+    const rect = audioTrackEl.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width || 600));
+    const h = 32;
+    canvasEl.width = w; canvasEl.height = h;
+    const cx = canvasEl.getContext('2d');
+    cx.clearRect(0,0,w,h);
+    cx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ai').trim() || '#4fd1c5';
+    cx.globalAlpha = 0.7;
+    const barW = w/audioWaveformPeaks.length;
+    audioWaveformPeaks.forEach((p,i)=>{
+      const barH = Math.max(1, p*h);
+      cx.fillRect(i*barW, (h-barH)/2, Math.max(1,barW-1), barH);
+    });
+  } catch(e){
+    console.error('Waveform decode failed:', e);
+    audioTrackEl.innerHTML = '<div class="audio-empty mono">파형을 그리지 못했어요 (지원 안 되는 오디오 형식일 수 있어요)</div>';
+  }
+}
+
+// --- captions (subtitle) track: independent of the photo/gap timeline —
+// captions just carry their own [start,end] in the same overall timeline
+// seconds. Drag the body to move, drag an edge handle to resize.
+const CAPTION_POSITIONS = { top: 0.12, center: 0.5, bottom: 0.85 };
+
+function currentTotalDur(){
+  return masterTimelineDuration();
+}
+
+function addCaption(){
+  const totalDur = currentTotalDur();
+  if(totalDur<=0) return;
+  const dur = Math.min(2, totalDur);
+  const start = Math.min(previewTime, Math.max(0, totalDur-dur));
+  const cap = {
+    id: captionIdCounter++,
+    text: '자막을 입력하세요',
+    start, end: start+dur,
+    color: '#ffffff', size: 36, box: true,
+    borderWidth: 0, borderColor: '#000000',
+    shadowOffsetX: 0, shadowOffsetY: 0, shadowColor: 'rgba(0,0,0,0.7)',
+    x: 0.5, y: CAPTION_POSITIONS.bottom
+  };
+  state.captions.push(cap);
+  renderTextTrack();
+  seekPreview(previewTime);
+  return cap;
+}
+
+function renderTextTrack(){
+  textTrack.innerHTML = '';
+  const totalDur = currentTotalDur();
+  addCaptionBtn.disabled = totalDur<=0;
+  cropCurrentBtn.disabled = totalDur<=0;
+  if(totalDur<=0) return;
+  state.captions.forEach(cap=>{
+    const block = document.createElement('div');
+    block.className = 'caption-block';
+    block.dataset.captionId = cap.id;
+    block.style.left = (cap.start/totalDur*100) + '%';
+    block.style.width = (Math.max(0,(cap.end-cap.start))/totalDur*100) + '%';
+    block.textContent = cap.text || '(빈 자막)';
+    const leftHandle = document.createElement('div');
+    leftHandle.className = 'caption-handle left';
+    leftHandle.dataset.captionId = cap.id;
+    leftHandle.dataset.edge = 'start';
+    const rightHandle = document.createElement('div');
+    rightHandle.className = 'caption-handle right';
+    rightHandle.dataset.captionId = cap.id;
+    rightHandle.dataset.edge = 'end';
+    block.appendChild(leftHandle);
+    block.appendChild(rightHandle);
+    textTrack.appendChild(block);
+  });
+}
+
+// Caption style presets — each is a full combination of color/size/box/
+// position, applied all at once so the caption looks "done" in one click
+// instead of tuning four separate controls by hand.
+// Each template is a full look — color/size/box PLUS optional stroke
+// (borderWidth/borderColor) and drop shadow (shadowOffsetX/Y/shadowColor).
+// Fields a template doesn't set default to "off" so applying one always
+// fully replaces whatever the previously-applied template left behind.
+const CAPTION_TEMPLATES = [
+  { name:'기본', color:'#ffffff', size:36, box:true, x:0.5, y:CAPTION_POSITIONS.bottom },
+  { name:'예능 자막', color:'#ffffff', size:44, box:false, x:0.5, y:CAPTION_POSITIONS.bottom, borderWidth:4, borderColor:'#000000' },
+  { name:'네온 그림자', color:'#00ffcc', size:42, box:false, x:0.5, y:CAPTION_POSITIONS.bottom, shadowOffsetX:3, shadowOffsetY:3, shadowColor:'rgba(0,0,0,0.8)' }
+];
+
+// Renders a small "자막" sample using the exact same draw order as
+// drawCaptionsAt (box, then shadow, then stroke, then fill) so the
+// thumbnail is a real preview, not a text-shadow CSS approximation.
+// Font size/border/shadow are fixed at thumbnail scale regardless of the
+// template's own values — a template's "size" is tunable separately via
+// the slider, so the thumbnail only needs to sell the color/box/border/
+// shadow combination.
+function drawCaptionTemplateThumb(canvasEl, tpl){
+  const cx = canvasEl.getContext('2d');
+  const w = canvasEl.width, h = canvasEl.height;
+  cx.clearRect(0,0,w,h);
+  cx.fillStyle = '#3a3a40';
+  cx.fillRect(0,0,w,h);
+  const size = 18;
+  const text = '자막';
+  cx.font = `700 ${size}px 'Inter', sans-serif`;
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  const textW = cx.measureText(text).width;
+  const padX = size*0.4, padY = size*0.25;
+  const cx0 = w/2, cy0 = h/2;
+  if(tpl.box){
+    cx.fillStyle = 'rgba(0,0,0,0.55)';
+    cx.fillRect(cx0-textW/2-padX, cy0-size/2-padY, textW+padX*2, size+padY*2);
+  }
+  if(tpl.shadowOffsetX || tpl.shadowOffsetY){
+    cx.shadowColor = tpl.shadowColor || 'rgba(0,0,0,0.7)';
+    cx.shadowOffsetX = (tpl.shadowOffsetX||0) * 0.4;
+    cx.shadowOffsetY = (tpl.shadowOffsetY||0) * 0.4;
+  }
+  if(tpl.borderWidth > 0){
+    cx.lineWidth = Math.max(1, tpl.borderWidth * 0.4);
+    cx.strokeStyle = tpl.borderColor || '#000000';
+    cx.lineJoin = 'round';
+    cx.strokeText(text, cx0, cy0);
+  }
+  cx.fillStyle = tpl.color;
+  cx.fillText(text, cx0, cy0);
+  cx.shadowColor = 'transparent';
+  cx.shadowOffsetX = 0; cx.shadowOffsetY = 0;
+}
+
+function renderCaptionTemplates(){
+  const row = document.getElementById('captionTemplateRow');
+  row.innerHTML = '';
+  CAPTION_TEMPLATES.forEach(tpl=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'caption-template-btn';
+    const thumb = document.createElement('canvas');
+    thumb.width = 96; thumb.height = 54;
+    drawCaptionTemplateThumb(thumb, tpl);
+    const label = document.createElement('span');
+    label.textContent = tpl.name;
+    btn.appendChild(thumb);
+    btn.appendChild(label);
+    btn.addEventListener('click', ()=>{
+      const cap = state.captions.find(c=>c.id===captionEditingId);
+      if(!cap) return;
+      cap.color = tpl.color; cap.size = tpl.size; cap.box = tpl.box;
+      cap.x = tpl.x; cap.y = tpl.y;
+      cap.borderWidth = tpl.borderWidth || 0;
+      cap.borderColor = tpl.borderColor || '#000000';
+      cap.shadowOffsetX = tpl.shadowOffsetX || 0;
+      cap.shadowOffsetY = tpl.shadowOffsetY || 0;
+      cap.shadowColor = tpl.shadowColor || 'rgba(0,0,0,0.7)';
+      syncCaptionControlsFromCap(cap);
+      seekPreview(previewTime);
+    });
+    row.appendChild(btn);
+  });
+  if(customCaptionTemplates.length){
+    const divider = document.createElement('div');
+    divider.className = 'caption-template-divider';
+    divider.textContent = '내 템플릿';
+    row.appendChild(divider);
+    customCaptionTemplates.forEach((tpl, idx)=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'caption-template-btn';
+      const thumb = document.createElement('canvas');
+      thumb.width = 96; thumb.height = 54;
+      drawCaptionTemplateThumb(thumb, tpl);
+      const label = document.createElement('span');
+      label.textContent = tpl.name;
+      const del = document.createElement('div');
+      del.className = 'caption-template-del';
+      del.textContent = '×';
+      del.title = '내 템플릿 삭제';
+      del.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        customCaptionTemplates.splice(idx, 1);
+        saveCustomCaptionTemplates();
+        renderCaptionTemplates();
+      });
+      btn.appendChild(thumb);
+      btn.appendChild(label);
+      btn.appendChild(del);
+      btn.addEventListener('click', ()=>{
+        const cap = state.captions.find(c=>c.id===captionEditingId);
+        if(!cap) return;
+        cap.color = tpl.color; cap.size = tpl.size; cap.box = tpl.box;
+        cap.x = tpl.x; cap.y = tpl.y;
+        cap.borderWidth = tpl.borderWidth || 0;
+        cap.borderColor = tpl.borderColor || '#000000';
+        cap.shadowOffsetX = tpl.shadowOffsetX || 0;
+        cap.shadowOffsetY = tpl.shadowOffsetY || 0;
+        cap.shadowColor = tpl.shadowColor || 'rgba(0,0,0,0.7)';
+        syncCaptionControlsFromCap(cap);
+        seekPreview(previewTime);
+      });
+      row.appendChild(btn);
+    });
+  }
+}
+
+// Reflects a caption's current style onto the modal's own controls — used
+// both when opening the editor and right after a template is applied, so
+// the sliders/pickers never show a stale value from a previous caption or
+// a previously-applied template.
+function syncCaptionControlsFromCap(cap){
+  captionColor.value = cap.color;
+  captionSizeSlider.value = cap.size;
+  captionSizeLabel.textContent = cap.size + 'px';
+  captionBorderWidthSlider.value = cap.borderWidth || 0;
+  captionBorderColor.value = rgbaOrHexToHex(cap.borderColor) || '#000000';
+  captionShadowStrengthSlider.value = Math.round(Math.abs(cap.shadowOffsetX || 0));
+  captionShadowColor.value = rgbaOrHexToHex(cap.shadowColor) || '#000000';
+  captionBoxToggle.checked = cap.box !== false;
+}
+
+// <input type=color> only accepts #rrggbb — templates/captions may carry
+// an rgba(...) shadow color instead, so pull just the RGB part out of it.
+function rgbaOrHexToHex(c){
+  if(typeof c !== 'string') return null;
+  if(/^#[0-9a-fA-F]{6}$/.test(c)) return c;
+  const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if(!m) return null;
+  return '#' + [m[1],m[2],m[3]].map(n=>Math.max(0,Math.min(255,parseInt(n,10))).toString(16).padStart(2,'0')).join('');
+}
+
+function openCaptionEditor(cap){
+  captionEditingId = cap.id;
+  captionText.value = cap.text;
+  captionPosition.value = ''; // a "jump to..." action, not a stored/restored field — see its change handler
+  syncCaptionControlsFromCap(cap);
+  renderCaptionTemplates();
+  captionModal.classList.add('open');
+}
+function closeCaptionEditor(commit){
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(cap && commit){
+    cap.text = captionText.value.trim() || '자막';
+    cap.color = captionColor.value;
+    cap.size = parseInt(captionSizeSlider.value);
+  }
+  captionEditingId = null;
+  captionModal.classList.remove('open');
+  renderTextTrack();
+  seekPreview(previewTime);
+}
+let captionEditingId = null;
+addCaptionBtn.addEventListener('click', ()=>{
+  const cap = addCaption();
+  if(cap) openCaptionEditor(cap);
+});
+cropCurrentBtn.addEventListener('click', ()=>{
+  const active = state.photos.filter(p=>p.included);
+  if(active.length===0) return;
+  const { durations, gaps, starts } = buildTimeline(active);
+  const loc = locateOnTimeline(previewTime||0, durations, gaps, starts);
+  const clip = active[loc.idx];
+  // Video clips always cover-crop centered on export in this version — the
+  // position/zoom editor only affects photos, so skip it for a video clip
+  // rather than let the user adjust something the render will ignore.
+  if(clip.kind === 'video') return;
+  openCropEditor(clip);
+});
+captionSizeSlider.addEventListener('input', ()=>{ captionSizeLabel.textContent = captionSizeSlider.value + 'px'; });
+
+// Border/shadow/box — live-applied straight to the caption, same as the
+// template buttons and the position dropdown, so the preview always shows
+// exactly what's currently dialed in.
+captionBorderWidthSlider.addEventListener('input', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  cap.borderWidth = parseInt(captionBorderWidthSlider.value, 10);
+  seekPreview(previewTime);
+});
+captionBorderColor.addEventListener('input', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  cap.borderColor = captionBorderColor.value;
+  seekPreview(previewTime);
+});
+captionShadowStrengthSlider.addEventListener('input', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  const v = parseInt(captionShadowStrengthSlider.value, 10);
+  cap.shadowOffsetX = v; cap.shadowOffsetY = v;
+  seekPreview(previewTime);
+});
+captionShadowColor.addEventListener('input', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  cap.shadowColor = captionShadowColor.value;
+  seekPreview(previewTime);
+});
+captionBoxToggle.addEventListener('change', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  cap.box = captionBoxToggle.checked;
+  seekPreview(previewTime);
+});
+captionSaveTemplateBtn.addEventListener('click', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  if(!cap) return;
+  const name = (prompt('템플릿 이름을 입력하세요', '내 템플릿') || '').trim();
+  if(!name) return;
+  // Read color/size straight from the form fields rather than off cap —
+  // those two are only committed to cap on "완료", so saving from cap here
+  // would silently drop a color/size change the user just made but hasn't
+  // confirmed yet. Position/border/shadow/box are already live on cap.
+  customCaptionTemplates.push({
+    name, color:captionColor.value, size:parseInt(captionSizeSlider.value, 10),
+    box:cap.box !== false, x:cap.x, y:cap.y,
+    borderWidth:cap.borderWidth || 0, borderColor:cap.borderColor || '#000000',
+    shadowOffsetX:cap.shadowOffsetX || 0, shadowOffsetY:cap.shadowOffsetY || 0,
+    shadowColor:cap.shadowColor || 'rgba(0,0,0,0.7)'
+  });
+  saveCustomCaptionTemplates();
+  renderCaptionTemplates();
+});
+captionPosition.addEventListener('change', ()=>{
+  const cap = state.captions.find(c=>c.id===captionEditingId);
+  const value = captionPosition.value;
+  if(cap && CAPTION_POSITIONS.hasOwnProperty(value)){
+    cap.x = 0.5;
+    cap.y = CAPTION_POSITIONS[value];
+    seekPreview(previewTime);
+  }
+  captionPosition.value = ''; // one-shot action, not a field to keep reflecting
+});
+captionCloseBtn.addEventListener('click', ()=>closeCaptionEditor(true));
+captionCloseBtn2.addEventListener('click', ()=>closeCaptionEditor(false));
+captionDeleteBtn.addEventListener('click', ()=>{
+  state.captions = state.captions.filter(c=>c.id!==captionEditingId);
+  captionEditingId = null;
+  captionModal.classList.remove('open');
+  renderTextTrack();
+  seekPreview(previewTime);
+});
+
+// drag-to-move / drag-edge-to-resize, with click-vs-drag disambiguated by
+// how far the pointer actually travelled before release.
+let captionDragMode = null; // 'move' | 'resize-start' | 'resize-end'
+let captionDragId = null, captionDragStartX = 0, captionDragMoved = false;
+let captionDragOrigStart = 0, captionDragOrigEnd = 0, captionPxPerSec = 0;
+
+textTrack.addEventListener('pointerdown', e=>{
+  const handle = e.target.closest('.caption-handle');
+  const block = e.target.closest('.caption-block');
+  if(!block) return;
+  const cap = state.captions.find(c=>c.id===parseInt(block.dataset.captionId));
+  if(!cap) return;
+  const rect = textTrack.getBoundingClientRect();
+  const totalDur = currentTotalDur();
+  captionPxPerSec = (rect.width>0 && totalDur>0) ? rect.width/totalDur : 0;
+  captionDragId = cap.id;
+  captionDragStartX = e.clientX;
+  captionDragMoved = false;
+  captionDragOrigStart = cap.start;
+  captionDragOrigEnd = cap.end;
+  captionDragMode = handle ? (handle.dataset.edge==='start' ? 'resize-start' : 'resize-end') : 'move';
+  textTrack.setPointerCapture(e.pointerId);
+});
+textTrack.addEventListener('pointermove', e=>{
+  if(captionDragId===null || captionPxPerSec<=0) return;
+  const deltaSec = (e.clientX-captionDragStartX)/captionPxPerSec;
+  if(Math.abs(e.clientX-captionDragStartX) > 3) captionDragMoved = true;
+  const cap = state.captions.find(c=>c.id===captionDragId);
+  if(!cap) return;
+  const totalDur = currentTotalDur();
+  const MIN_CAP_DUR = 0.3;
+  if(captionDragMode==='move'){
+    const dur = captionDragOrigEnd - captionDragOrigStart;
+    let newStart = Math.max(0, Math.min(totalDur-dur, captionDragOrigStart+deltaSec));
+    cap.start = newStart; cap.end = newStart+dur;
+  } else if(captionDragMode==='resize-start'){
+    cap.start = Math.max(0, Math.min(captionDragOrigEnd-MIN_CAP_DUR, captionDragOrigStart+deltaSec));
+  } else if(captionDragMode==='resize-end'){
+    cap.end = Math.max(captionDragOrigStart+MIN_CAP_DUR, Math.min(totalDur, captionDragOrigEnd+deltaSec));
+  }
+  renderTextTrack();
+});
+textTrack.addEventListener('pointerup', ()=>{
+  if(captionDragId===null) return;
+  const cap = state.captions.find(c=>c.id===captionDragId);
+  const wasDrag = captionDragMoved;
+  captionDragId = null;
+  captionDragMode = null;
+  if(cap && !wasDrag){ openCaptionEditor(cap); }
+  else { seekPreview(previewTime); }
+});
+textTrack.addEventListener('pointercancel', ()=>{ captionDragId = null; captionDragMode = null; });
+
+// The playhead is a single absolutely-positioned line spanning every row
+// (TEXT/PHOTOS2/PHOTOS/AUDIO), but each row's own timed area only starts
+// after its track-label column — a plain "left: pct%" (percent of the
+// WHOLE wrap, label included) lands the playhead noticeably left of where
+// t=0 actually begins, overlapping the labels. The ruler's own track area
+// spans exactly the same timed region every other row does, so it's used
+// here as the pixel-accurate reference for where 0% and 100% really are.
+function updatePlayheadUI(totalDur){
+  const pct = totalDur>0 ? Math.min(1, previewTime/totalDur) : 0;
+  const wrapRect = timelineWrap.getBoundingClientRect();
+  const trackRect = timelineRuler.getBoundingClientRect();
+  if(wrapRect.width>0){
+    const offsetPx = trackRect.left - wrapRect.left;
+    timelinePlayhead.style.left = (offsetPx + pct*trackRect.width) + 'px';
+  } else {
+    timelinePlayhead.style.left = (pct*100) + '%';
+  }
+  timeDisplay.textContent = `${formatTime(previewTime)} / ${formatTime(totalDur)}`;
+}
+
+// Shared between drawing and canvas hit-testing so a caption's clickable
+// area always matches exactly what's drawn. cap.x/cap.y are the caption's
+// normalized (0-1) center point on the canvas — free-form now (drag it
+// directly on the preview), not just the three legacy presets.
+function captionBoxRect(cap){
+  const size = cap.size || 36;
+  ctx.save();
+  ctx.font = `700 ${size}px 'Inter', sans-serif`;
+  const textW = ctx.measureText(cap.text).width;
+  ctx.restore();
+  const padX = size*0.4, padY = size*0.25;
+  const cx0 = (cap.x ?? 0.5) * canvas.width;
+  const cy0 = (cap.y ?? CAPTION_POSITIONS.bottom) * canvas.height;
+  return { x: cx0-textW/2-padX, y: cy0-size/2-padY, w: textW+padX*2, h: size+padY*2, cx: cx0, cy: cy0, size };
+}
+
+function drawCaptionsAt(t){
+  state.captions.forEach(cap=>{
+    if(t < cap.start || t >= cap.end) return;
+    const box = captionBoxRect(cap);
+    ctx.save();
+    ctx.font = `700 ${box.size}px 'Inter', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if(cap.box !== false){
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(box.x, box.y, box.w, box.h);
+    }
+    // Shadow applies to both the stroke and the fill that follow — set it
+    // once, before either, same as ffmpeg's drawtext shadow does.
+    if(cap.shadowOffsetX || cap.shadowOffsetY){
+      ctx.shadowColor = cap.shadowColor || 'rgba(0,0,0,0.7)';
+      ctx.shadowOffsetX = cap.shadowOffsetX || 0;
+      ctx.shadowOffsetY = cap.shadowOffsetY || 0;
+    }
+    if(cap.borderWidth > 0){
+      ctx.lineWidth = cap.borderWidth * 2; // canvas strokes centered on the path, like ffmpeg's borderw
+      ctx.strokeStyle = cap.borderColor || '#000000';
+      ctx.lineJoin = 'round';
+      ctx.strokeText(cap.text, box.cx, box.cy);
+    }
+    ctx.fillStyle = cap.color || '#ffffff';
+    ctx.fillText(cap.text, box.cx, box.cy);
+    ctx.restore();
+  });
+}
+
+// Topmost (last-drawn) caption wins when boxes overlap, matching normal
+// z-order/click expectations.
+function hitTestCaptionAt(t, canvasX, canvasY){
+  for(let i=state.captions.length-1;i>=0;i--){
+    const cap = state.captions[i];
+    if(t < cap.start || t >= cap.end) continue;
+    const box = captionBoxRect(cap);
+    if(canvasX>=box.x && canvasX<=box.x+box.w && canvasY>=box.y && canvasY<=box.y+box.h) return cap;
+  }
+  return null;
+}
+
+function clientToCanvasXY(e){
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width>0 ? canvas.width/rect.width : 1;
+  const scaleY = rect.height>0 ? canvas.height/rect.height : 1;
+  return { x: (e.clientX-rect.left)*scaleX, y: (e.clientY-rect.top)*scaleY };
+}
+
+// Drag a caption directly on the live preview to reposition it anywhere —
+// same direct-manipulation feel as the timeline drags elsewhere in the app.
+// A plain click (no meaningful movement) opens the text/color/size editor
+// instead, mirroring the timeline caption block's click-vs-drag threshold.
+let captionCanvasDragId = null, captionCanvasDragMoved = false, captionCanvasStartX = 0, captionCanvasStartY = 0;
+canvas.addEventListener('pointerdown', e=>{
+  const { x, y } = clientToCanvasXY(e);
+  const hit = hitTestCaptionAt(previewTime, x, y);
+  if(!hit) return;
+  captionCanvasDragId = hit.id;
+  captionCanvasDragMoved = false;
+  captionCanvasStartX = e.clientX; captionCanvasStartY = e.clientY;
+  canvas.style.cursor = 'grabbing';
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e=>{
+  if(captionCanvasDragId==null){
+    const { x, y } = clientToCanvasXY(e);
+    canvas.style.cursor = hitTestCaptionAt(previewTime, x, y) ? 'grab' : '';
+    return;
+  }
+  const cap = state.captions.find(c=>c.id===captionCanvasDragId);
+  if(!cap) return;
+  if(Math.abs(e.clientX-captionCanvasStartX) > 3 || Math.abs(e.clientY-captionCanvasStartY) > 3) captionCanvasDragMoved = true;
+  const { x, y } = clientToCanvasXY(e);
+  cap.x = Math.min(1, Math.max(0, x/canvas.width));
+  cap.y = Math.min(1, Math.max(0, y/canvas.height));
+  seekPreview(previewTime);
+});
+canvas.addEventListener('pointerup', ()=>{
+  if(captionCanvasDragId==null) return;
+  const cap = state.captions.find(c=>c.id===captionCanvasDragId);
+  const wasDrag = captionCanvasDragMoved;
+  captionCanvasDragId = null;
+  canvas.style.cursor = '';
+  if(cap && !wasDrag) openCaptionEditor(cap);
+});
+canvas.addEventListener('pointercancel', ()=>{ captionCanvasDragId = null; canvas.style.cursor = ''; });
+
+// Resolves what drawCover should draw for this clip at this local time, and
+// (for a video clip) keeps its element seeked to the right point: playing
+// in step with the rAF clock during playback, paused and manually seeked
+// while scrubbing. Registers the element into stillPlaying so the caller
+// knows not to pause it this frame.
+function resolveClipSource(clip, localT, stillPlaying){
+  if(clip.kind !== 'video') return clip.img;
+  const v = clip.videoEl;
+  const desired = Math.min(clip.outPoint, Math.max(clip.inPoint, clip.inPoint + localT));
+  if(previewPlaying){
+    if(v.paused){ v.currentTime = desired; v.play().catch(()=>{}); }
+    else if(Math.abs(v.currentTime-desired) > 0.35){ v.currentTime = desired; } // resync if decoding drifted
+  } else {
+    if(!v.paused) v.pause();
+    if(Math.abs(v.currentTime-desired) > 0.02) v.currentTime = desired;
+  }
+  stillPlaying.add(v);
+  return v;
+}
+
+function drawPreviewFrame(t, active, durations, gaps, starts, totalDur){
+  const n = active.length;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const stillPlaying = new Set();
+
+  // Past the base track's own end (an extra track can run longer) there's
+  // nothing to draw underneath — leave it black and let the overlays show.
+  const baseDur = buildTimeline(active).totalDur;
+  if(n===0 || t >= baseDur){
+    frameCounter.textContent = `— / ${String(n).padStart(3,'0')}`;
+    drawExtraClipTracksOverlay(t);
+    drawCaptionsAt(t);
+    liveVideoEls.forEach(v=>{ if(!stillPlaying.has(v)) v.pause(); });
+    liveVideoEls = stillPlaying;
+    return;
+  }
+
+  const loc = locateOnTimeline(t, durations, gaps, starts);
+  if(loc.inGap){
+    frameCounter.textContent = `— / ${String(n).padStart(3,'0')}`;
+    drawExtraClipTracksOverlay(t);
+    drawCaptionsAt(t);
+    liveVideoEls.forEach(v=>{ if(!stillPlaying.has(v)) v.pause(); });
+    liveVideoEls = stillPlaying;
+    return; // blank screen otherwise — nothing else to draw
+  }
+  const idx = loc.idx;
+  const photoDur = durations[idx];
+  const progress01 = photoDur>0 ? Math.min(1, loc.localT/photoDur) : 0;
+  const kb = active[idx].kenBurns;
+
+  // A gap right after this photo always means a hard cut into it (dissolving
+  // into blank space doesn't read as a transition), same as reaching the end.
+  const nextTransition = active[idx].transitionAfter || currentTransition;
+  const isHardCut = gaps[idx]>0 || nextTransition === 'none' || nextTransition === 'cut' || idx>=n-1;
+  const crossDur = isHardCut ? 0 : Math.min(0.6, photoDur*0.3);
+
+  if(crossDur>0 && loc.localT > photoDur-crossDur){
+    const fadeT = (loc.localT-(photoDur-crossDur))/crossDur;
+    const srcA = resolveClipSource(active[idx], loc.localT, stillPlaying);
+    const srcB = resolveClipSource(active[idx+1], 0, stillPlaying);
+    drawCover(srcA,0,0,canvas.width,canvas.height, 1-fadeT, kb, progress01, active[idx].cropFocus);
+    drawCover(srcB,0,0,canvas.width,canvas.height, fadeT, active[idx+1].kenBurns, 0, active[idx+1].cropFocus);
+  } else {
+    const src = resolveClipSource(active[idx], loc.localT, stillPlaying);
+    drawCover(src,0,0,canvas.width,canvas.height, 1, kb, progress01, active[idx].cropFocus);
+  }
+  frameCounter.textContent = `${String(idx+1).padStart(3,'0')} / ${String(n).padStart(3,'0')}`;
+  drawExtraClipTracksOverlay(t);
+  drawCaptionsAt(t);
+  liveVideoEls.forEach(v=>{ if(!stillPlaying.has(v)) v.pause(); });
+  liveVideoEls = stillPlaying;
+}
+
+function seekPreview(t){
+  const active = state.photos.filter(p=>p.included);
+  const master = masterTimelineDuration();
+  if(master<=0) return;
+  const { durations, gaps, starts } = buildTimeline(active);
+  previewTime = Math.max(0, Math.min(master, t));
+  drawPreviewFrame(previewTime, active, durations, gaps, starts, master);
+  updatePlayheadUI(master);
+}
+
+function stopPreviewPlayback(){
+  previewPlaying = false;
+  if(previewRafId) cancelAnimationFrame(previewRafId);
+  previewRafId = null;
+  playPauseBtn.textContent = '▶';
+  liveVideoEls.forEach(v=>v.pause());
+}
+
+function startPreviewPlayback(){
+  const master = masterTimelineDuration();
+  if(master<=0) return;
+  if(previewTime >= master) previewTime = 0;
+  previewPlaying = true;
+  playPauseBtn.textContent = '⏸';
+  const startWall = performance.now();
+  const startTime = previewTime;
+
+  function step(now){
+    if(!previewPlaying) return;
+    const elapsed = (now-startWall)/1000;
+    const active2 = state.photos.filter(p=>p.included);
+    const { durations, gaps, starts } = buildTimeline(active2);
+    const md = masterTimelineDuration();
+    const t = Math.min(startTime+elapsed, md);
+    previewTime = t;
+    drawPreviewFrame(t, active2, durations, gaps, starts, md);
+    updatePlayheadUI(md);
+    if(t >= md){ stopPreviewPlayback(); return; }
+    previewRafId = requestAnimationFrame(step);
+  }
+  previewRafId = requestAnimationFrame(step);
+}
+
+playPauseBtn.addEventListener('click', ()=>{
+  if(previewPlaying) stopPreviewPlayback();
+  else startPreviewPlayback();
+});
+
+let scrubbing = false;
+function trackPositionToTime(clientX){
+  const rect = timelineTrack.getBoundingClientRect();
+  const pct = rect.width>0 ? Math.max(0, Math.min(1, (clientX-rect.left)/rect.width)) : 0;
+  return pct*masterTimelineDuration();
+}
+
+// --- clip track controller -------------------------------------------------
+// Every clip track — the base CLIP track and every CLIP2/CLIP3/... added
+// with "+" — is driven by this one factory, so they all get exactly the
+// same editing model: Premiere-style trim handles (drag left to shorten a
+// clip and leave a black gap behind it), draggable gaps, dropping a clip
+// into a gap, drag-to-reorder, and dragging a clip across to another track.
+const MIN_SEG_DURATION = 0.4, MAX_SEG_DURATION = 20;
+
+// The shared time scale every track is drawn against: the longest track
+// wins, so 0:05 on CLIP2 sits directly above 0:05 on CLIP.
+function masterTimelineDuration(){
+  let maxDur = buildTimeline(state.photos.filter(p=>p.included)).totalDur;
+  state.extraClipTracks.forEach(t=>{
+    const d = buildTimeline(t.photos.filter(p=>p.included)).totalDur;
+    if(d > maxDur) maxDur = d;
+  });
+  return maxDur;
+}
+
+function renderAllClipTracks(){ clipTrackControllers.forEach(c=>c.renderOnly()); }
+
+function findClipTrackEntryAtY(clientY, excludeEntry){
+  for(const entry of clipTrackRegistry){
+    if(entry === excludeEntry) continue;
+    const rect = entry.trackEl.getBoundingClientRect();
+    if(clientY >= rect.top && clientY <= rect.bottom) return entry;
+  }
+  return null;
+}
+
+function updateCrossTrackHighlight(hoverEntry){
+  clipTrackRegistry.forEach(e=>e.trackEl.classList.remove('cross-track-hover'));
+  if(hoverEntry) hoverEntry.trackEl.classList.add('cross-track-hover');
+}
+
+// Hands a clip off from one track to another entirely. Fields the target
+// track doesn't happen to use (Ken Burns, crop focus, video metadata...)
+// ride along untouched, so moving it back later restores it exactly.
+function moveClipBetweenTracks(photoId, sourceEntry, targetEntry, dropClientX){
+  const sourcePhotos = sourceEntry.getPhotos();
+  const idx = sourcePhotos.findIndex(p=>p.id===photoId);
+  if(idx===-1) return;
+  const [moved] = sourcePhotos.splice(idx,1);
+  sourceEntry.setPhotos(sourcePhotos);
+  const targetPhotos = targetEntry.getPhotos();
+  const targetActive = targetPhotos.filter(p=>p.included);
+  const targetExcluded = targetPhotos.filter(p=>!p.included);
+  const insertAt = Math.max(0, Math.min(targetActive.length, targetEntry.dropIndexAtX(dropClientX)));
+  targetActive.splice(insertAt, 0, moved);
+  targetEntry.setPhotos([...targetActive, ...targetExcluded]);
+  sourceEntry.afterChange();
+  targetEntry.afterChange();
+}
+
+const CURSOR_TRIM_NORMAL = 'ew-resize';
+const CURSOR_TRIM_NEW_GAP = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M8 12h8M8 12l3-3M8 12l3 3M16 12l-3-3M16 12l-3 3' stroke='%23e2453a' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") 12 12, ew-resize`;
+
+function createClipTrackController(opts){
+  const { trackEl, getPhotos, setPhotos, isBase, fileInput, onChange } = opts;
+
+  // ---- geometry: every track maps x -> time on the shared master scale ----
+  function pxToTime(clientX){
+    const rect = trackEl.getBoundingClientRect();
+    const master = masterTimelineDuration();
+    const pct = rect.width>0 ? Math.max(0, Math.min(1, (clientX-rect.left)/rect.width)) : 0;
+    return pct*master;
+  }
+
+  // ---- rendering ----
+  function renderOnly(){
+    trackEl.innerHTML = '';
+    const active = getPhotos().filter(p=>p.included);
+    if(active.length===0){
+      {
+        const hint = document.createElement('div');
+        hint.className = 'audio-empty mono';
+        hint.textContent = '클릭해서 사진을 추가하세요';
+        trackEl.appendChild(hint);
+      }
+      return;
+    }
+    const master = masterTimelineDuration();
+    const { durations, gaps } = buildTimeline(active);
+    let cumPct = 0;
+    active.forEach((p,i)=>{
+      const widthPct = master>0 ? durations[i]/master*100 : 0;
+      const seg = document.createElement('div');
+      seg.className = 'timeline-seg' + (p.kind==='video' ? ' is-video' : '');
+      seg.style.width = widthPct + '%';
+      seg.style.backgroundImage = `url(${p.img.src})`;
+      seg.dataset.photoId = p.id;
+      if(!isBase){
+        const del = document.createElement('div');
+        del.className = 'timeline-seg-del';
+        del.textContent = '×';
+        del.dataset.photoId = p.id;
+        seg.appendChild(del);
+      }
+      trackEl.appendChild(seg);
+      cumPct += widthPct;
+
+      if(gaps[i] > 0){
+        const gapWidthPct = master>0 ? gaps[i]/master*100 : 0;
+        const gapEl = document.createElement('div');
+        gapEl.className = 'timeline-gap';
+        gapEl.title = `빈 화면 ${gaps[i].toFixed(1)}초 — 드래그하면 다른 위치로 옮길 수 있어요`;
+        gapEl.style.width = gapWidthPct + '%';
+        gapEl.dataset.photoId = p.id;
+        trackEl.appendChild(gapEl);
+        cumPct += gapWidthPct;
+      }
+
+      // A trim handle at every clip boundary INCLUDING after the last one,
+      // so a track's final clip can be shortened too (the freed time just
+      // becomes trailing black, exactly like any other gap).
+      const handle = document.createElement('div');
+      handle.className = 'timeline-handle';
+      handle.style.left = cumPct + '%';
+      handle.dataset.photoId = p.id;
+      trackEl.appendChild(handle);
+    });
+  }
+
+  function afterChange(){
+    renderAllClipTracks();
+    onChange();
+  }
+
+  const entry = {
+    trackEl, getPhotos, setPhotos,
+    dropIndexAtX: (clientX)=>activeIndexAtX(clientX, true),
+    afterChange,
+    render: afterChange
+  };
+  clipTrackRegistry.push(entry);
+
+  // ---- per-track helpers (identical maths for every track) ----
+  function activeIndexAtX(clientX, allowAppend){
+    const active = getPhotos().filter(p=>p.included);
+    if(active.length===0) return 0;
+    const { durations, gaps } = buildTimeline(active);
+    const t = pxToTime(clientX);
+    let cum = 0;
+    for(let i=0;i<active.length;i++){
+      const mid = cum + durations[i]/2;
+      if(t < mid) return i;
+      cum += durations[i] + gaps[i];
+    }
+    return allowAppend ? active.length : active.length-1;
+  }
+
+  // Which gap the pointer is inside, and how far into it — dropping a clip
+  // there splits the gap around it, so total duration never changes.
+  function gapHitAtX(clientX){
+    const active = getPhotos().filter(p=>p.included);
+    const { durations, gaps, starts } = buildTimeline(active);
+    const t = pxToTime(clientX);
+    for(let i=0;i<active.length;i++){
+      if(gaps[i]<=0) continue;
+      const gapStart = starts[i]+durations[i];
+      const gapEnd = gapStart+gaps[i];
+      if(t>=gapStart && t<gapEnd) return { ownerId: active[i].id, offset: t-gapStart, gapDuration: gaps[i] };
+    }
+    return null;
+  }
+
+  // Nearest clip boundary, for relocating a dragged gap. Junction i is the
+  // point right after clip i — including after the LAST clip, so a black
+  // frame can be parked at the end of the track as a tail.
+  function junctionIndexAtX(clientX){
+    const active = getPhotos().filter(p=>p.included);
+    if(active.length===0) return -1;
+    const { durations, starts } = buildTimeline(active);
+    const t = pxToTime(clientX);
+    let best = 0, bestDist = Infinity;
+    for(let i=0;i<active.length;i++){
+      const dist = Math.abs(t-(starts[i]+durations[i]));
+      if(dist<bestDist){ bestDist = dist; best = i; }
+    }
+    return best;
+  }
+
+  function clearIndicators(){
+    trackEl.querySelectorAll('.timeline-seg.drop-before,.timeline-seg.drop-after').forEach(el=>el.classList.remove('drop-before','drop-after'));
+    trackEl.querySelectorAll('.timeline-gap.gap-consume-target').forEach(el=>el.classList.remove('gap-consume-target'));
+    trackEl.querySelectorAll('.timeline-handle.drop-target-gap').forEach(el=>el.classList.remove('drop-target-gap'));
+    trackEl.querySelectorAll('.gap-drop-marker').forEach(el=>el.remove());
+  }
+
+  function showDropIndicator(index){
+    clearIndicators();
+    const segs = trackEl.querySelectorAll('.timeline-seg');
+    const active = getPhotos().filter(p=>p.included);
+    const fromIndex = active.findIndex(p=>p.id===reorderPhotoId);
+    if(index <= fromIndex){ if(segs[index]) segs[index].classList.add('drop-before'); }
+    else { if(segs[index]) segs[index].classList.add('drop-after'); }
+  }
+
+  function showGapConsumeIndicator(ownerId, offset, gapDuration){
+    clearIndicators();
+    const gapEl = [...trackEl.querySelectorAll('.timeline-gap')].find(g=>g.dataset.photoId===String(ownerId));
+    if(!gapEl) return;
+    gapEl.classList.add('gap-consume-target');
+    const marker = document.createElement('div');
+    marker.className = 'gap-drop-marker';
+    marker.style.left = (gapDuration>0 ? Math.max(0, Math.min(100, offset/gapDuration*100)) : 0) + '%';
+    gapEl.appendChild(marker);
+  }
+
+  function showGapDropIndicator(targetIndex){
+    clearIndicators();
+    const handles = trackEl.querySelectorAll('.timeline-handle');
+    if(handles[targetIndex]) handles[targetIndex].classList.add('drop-target-gap');
+  }
+
+  function moveActivePhoto(photoId, toIndex){
+    const photos = getPhotos();
+    const active = photos.filter(p=>p.included);
+    const excluded = photos.filter(p=>!p.included);
+    const fromIndex = active.findIndex(p=>p.id===photoId);
+    if(fromIndex===-1) return;
+    toIndex = Math.max(0, Math.min(active.length-1, toIndex));
+    if(fromIndex===toIndex) return;
+    const [moved] = active.splice(fromIndex,1);
+    active.splice(toIndex,0,moved);
+    setPhotos([...active, ...excluded]);
+  }
+
+  // Drops a clip into a gap at "offset" seconds in: the gap splits into
+  // offset (kept behind the owner) and the leftover (handed to the moved
+  // clip as its own trailing gap) — nothing is deleted or stretched, so
+  // the track's total length is unchanged.
+  function moveActivePhotoIntoGap(photoId, gapOwnerId, offset){
+    const photos = getPhotos();
+    const active = photos.filter(p=>p.included);
+    const excluded = photos.filter(p=>!p.included);
+    const fromIndex = active.findIndex(p=>p.id===photoId);
+    const owner = active.find(p=>p.id===gapOwnerId);
+    if(fromIndex===-1 || !owner || photoId===gapOwnerId) return;
+    const gapDuration = owner.gapAfter || 0;
+    const clampedOffset = Math.max(0, Math.min(gapDuration, offset));
+    const leftover = gapDuration - clampedOffset;
+    owner.gapAfter = clampedOffset;
+    const [moved] = active.splice(fromIndex,1);
+    moved.gapAfter = (moved.gapAfter||0) + leftover;
+    const ownerIndex = active.findIndex(p=>p.id===gapOwnerId); // re-find after splice
+    active.splice(ownerIndex+1, 0, moved);
+    setPhotos([...active, ...excluded]);
+  }
+
+  // Relocates a gap to a different junction; merges with any gap already
+  // sitting there rather than overwriting it.
+  function moveGapTo(sourcePhotoId, targetIndex){
+    const active = getPhotos().filter(p=>p.included);
+    const source = active.find(p=>p.id===sourcePhotoId);
+    if(!source) return;
+    const dur = source.gapAfter || 0;
+    if(dur<=0) return;
+    const target = active[Math.max(0, Math.min(active.length-1, targetIndex))];
+    if(!target) return;
+    source.gapAfter = 0;
+    target.gapAfter = (target.gapAfter||0) + dur;
+  }
+
+  // ---- drag state, one independent set per track ----
+  let trimming=false, trimPhotoId=null, trimStartX=0, trimStartDuration=0, trimStartGap=0, trimStartInPoint=0, trimPxPerSec=0;
+  let reordering=false, reorderPhotoId=null, reorderDropIndex=-1;
+  let consumeGapOwnerId=null, consumeGapOffset=0;
+  let gapDragging=false, gapDragPhotoId=null, gapDragTargetIndex=-1;
+  let scrubPending=false, scrubMoved=false, scrubStartX=0;
+
+  trackEl.addEventListener('pointerdown', e=>{
+    if(e.target.closest('.timeline-seg-del')) return; // handled on click
+    const handle = e.target.closest('.timeline-handle');
+    const gapEl = e.target.closest('.timeline-gap');
+    const seg = e.target.closest('.timeline-seg');
+    const photos = getPhotos();
+    const active = photos.filter(p=>p.included);
+
+    if(handle && handle.dataset.photoId){
+      // Once anything is trimmed every clip needs an explicit duration, or
+      // buildTimeline's "they all have durations" check flips false and
+      // silently discards the trim via uniform auto-pacing.
+      active.forEach(p=>{ if(typeof p.duration !== 'number') p.duration = getPerPhoto(active.length); });
+      trimming = true;
+      trimPhotoId = parseInt(handle.dataset.photoId);
+      const photo = photos.find(p=>p.id===trimPhotoId);
+      if(!photo){ trimming = false; return; }
+      trimStartDuration = photo.duration;
+      trimStartGap = Math.max(0, photo.gapAfter||0);
+      trimStartInPoint = photo.inPoint || 0;
+      trimStartX = e.clientX;
+      const rect = trackEl.getBoundingClientRect();
+      const master = masterTimelineDuration();
+      trimPxPerSec = (rect.width>0 && master>0) ? rect.width/master : 0;
+      handle.classList.add('active');
+      document.body.style.cursor = CURSOR_TRIM_NORMAL;
+      trackEl.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    if(gapEl && gapEl.dataset.photoId){
+      gapDragging = true;
+      gapDragPhotoId = parseInt(gapEl.dataset.photoId);
+      gapDragTargetIndex = junctionIndexAtX(e.clientX);
+      gapEl.classList.add('dragging-seg');
+      showGapDropIndicator(gapDragTargetIndex);
+      trackEl.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    if(seg && seg.dataset.photoId){
+      reordering = true;
+      reorderPhotoId = parseInt(seg.dataset.photoId);
+      reorderDropIndex = active.findIndex(p=>p.id===reorderPhotoId);
+      consumeGapOwnerId = null;
+      seg.classList.add('dragging-seg');
+      trackEl.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    if(isBase){
+      // On empty bar space a DRAG still scrubs (as the hint below the
+      // timeline promises), but a plain click opens the photo picker —
+      // same gesture the extra CLIP tracks use to fill themselves.
+      scrubPending = true;
+      scrubMoved = false;
+      scrubStartX = e.clientX;
+      trackEl.setPointerCapture(e.pointerId);
+    }
+  });
+
+  trackEl.addEventListener('pointermove', e=>{
+    if(trimming){
+      if(trimPxPerSec<=0) return;
+      const deltaSec = (e.clientX-trimStartX)/trimPxPerSec;
+      const photo = getPhotos().find(p=>p.id===trimPhotoId);
+      if(photo){
+        if(deltaSec >= 0){
+          // Rightward NEVER stretches the clip itself — it only eats back
+          // into the existing gap, then grows a brand-new one past zero.
+          photo.gapAfter = Math.abs(trimStartGap - deltaSec);
+          document.body.style.cursor = (deltaSec > trimStartGap) ? CURSOR_TRIM_NEW_GAP : CURSOR_TRIM_NORMAL;
+        } else {
+          const maxShrink = trimStartDuration - MIN_SEG_DURATION;
+          const shrink = Math.min(maxShrink, -deltaSec);
+          photo.duration = trimStartDuration - shrink;
+          photo.gapAfter = trimStartGap + shrink;
+          // A video clip's length is a window into its source file, so the
+          // tail moves with it while its in-point stays put.
+          if(photo.kind === 'video') photo.outPoint = trimStartInPoint + photo.duration;
+          document.body.style.cursor = CURSOR_TRIM_NORMAL;
+        }
+      }
+      renderAllClipTracks();
+      renderTimelineRuler(masterTimelineDuration());
+      updatePlayheadUI(masterTimelineDuration());
+      return;
+    }
+
+    if(reordering){
+      const hoverEntry = findClipTrackEntryAtY(e.clientY, entry);
+      if(hoverEntry){
+        crossTrackHoverEntry = hoverEntry;
+        updateCrossTrackHighlight(hoverEntry);
+        clearIndicators();
+        return;
+      }
+      crossTrackHoverEntry = null;
+      updateCrossTrackHighlight(null);
+      const gapHit = gapHitAtX(e.clientX);
+      if(gapHit && gapHit.ownerId !== reorderPhotoId){
+        consumeGapOwnerId = gapHit.ownerId;
+        consumeGapOffset = gapHit.offset;
+        showGapConsumeIndicator(gapHit.ownerId, gapHit.offset, gapHit.gapDuration);
+      } else {
+        consumeGapOwnerId = null;
+        reorderDropIndex = activeIndexAtX(e.clientX, false);
+        showDropIndicator(reorderDropIndex);
+      }
+      return;
+    }
+
+    if(gapDragging){
+      gapDragTargetIndex = junctionIndexAtX(e.clientX);
+      showGapDropIndicator(gapDragTargetIndex);
+      return;
+    }
+
+    if(scrubPending){
+      if(!scrubMoved && Math.abs(e.clientX-scrubStartX) > 3){
+        scrubMoved = true;
+        scrubbing = true;
+        stopPreviewPlayback();
+      }
+      if(scrubMoved) seekPreview(trackPositionToTime(e.clientX));
+    }
+  });
+
+  trackEl.addEventListener('pointerup', e=>{
+    if(trimming){
+      trimming = false;
+      document.body.style.cursor = '';
+      afterChange();
+      return;
+    }
+    if(reordering){
+      reordering = false;
+      if(crossTrackHoverEntry){
+        moveClipBetweenTracks(reorderPhotoId, entry, crossTrackHoverEntry, e.clientX);
+        crossTrackHoverEntry = null;
+        updateCrossTrackHighlight(null);
+        return;
+      }
+      if(consumeGapOwnerId != null) moveActivePhotoIntoGap(reorderPhotoId, consumeGapOwnerId, consumeGapOffset);
+      else moveActivePhoto(reorderPhotoId, reorderDropIndex);
+      consumeGapOwnerId = null;
+      afterChange();
+      return;
+    }
+    if(gapDragging){
+      gapDragging = false;
+      moveGapTo(gapDragPhotoId, gapDragTargetIndex);
+      afterChange();
+      return;
+    }
+    if(scrubPending){
+      const wasDrag = scrubMoved;
+      scrubPending = false; scrubMoved = false; scrubbing = false;
+      if(!wasDrag && fileInput) fileInput.click();
+      return;
+    }
+    scrubbing = false;
+  });
+
+  trackEl.addEventListener('pointercancel', ()=>{
+    trimming = false; reordering = false; gapDragging = false; scrubbing = false;
+    scrubPending = false; scrubMoved = false;
+    consumeGapOwnerId = null;
+    crossTrackHoverEntry = null;
+    updateCrossTrackHighlight(null);
+    document.body.style.cursor = '';
+  });
+
+  // Extra tracks are populated by clicking their own bar (the base track
+  // gets its photos from the "01 Load photos" dropzone instead), and their
+  // clips carry an × to remove them.
+  if(!isBase && fileInput){
+    trackEl.addEventListener('click', e=>{
+      const del = e.target.closest('.timeline-seg-del');
+      if(del){
+        const id = parseInt(del.dataset.photoId);
+        setPhotos(getPhotos().filter(p=>p.id!==id));
+        afterChange();
+        return;
+      }
+      if(!e.target.closest('.timeline-seg') && !e.target.closest('.timeline-gap')) fileInput.click();
+    });
+  }
+
+  const controller = { renderOnly, afterChange, entry };
+  clipTrackControllers.push(controller);
+  return controller;
+}
+
+const baseClipTrackController = createClipTrackController({
+  trackEl: timelineTrack,
+  getPhotos: () => state.photos,
+  setPhotos: (arr) => { state.photos = arr; },
+  isBase: true,
+  fileInput, // clicking the empty bar opens the same picker as the 01 dropzone
+  onChange: () => { renderFrames(); drawStaticPreview(); updateEstimate(); }
+});
+const baseClipTrackEntry = baseClipTrackController.entry;
+
+// Dragging the playhead itself scrubs too — it spans every track row (TEXT/
+// PHOTOS/PHOTOS2/AUDIO), so this is the one drag target that always works
+// regardless of which row happens to be under the cursor, unlike clicking a
+// specific row (which the TEXT/PHOTOS2 rows also use for their own
+// drag-to-edit gestures).
+timelinePlayhead.addEventListener('pointerdown', e=>{
+  scrubbing = true;
+  stopPreviewPlayback();
+  seekPreview(trackPositionToTime(e.clientX));
+  timelinePlayhead.setPointerCapture(e.pointerId);
+});
+timelinePlayhead.addEventListener('pointermove', e=>{
+  if(!scrubbing) return;
+  seekPreview(trackPositionToTime(e.clientX));
+});
+timelinePlayhead.addEventListener('pointerup', ()=>{ scrubbing = false; });
+timelinePlayhead.addEventListener('pointercancel', ()=>{ scrubbing = false; });
+
+// The ruler itself is also a scrub target, same as Premiere's timecode
+// ruler — click or drag anywhere on it to jump straight there.
+timelineRuler.addEventListener('pointerdown', e=>{
+  scrubbing = true;
+  stopPreviewPlayback();
+  seekPreview(trackPositionToTime(e.clientX));
+  timelineRuler.setPointerCapture(e.pointerId);
+});
+timelineRuler.addEventListener('pointermove', e=>{
+  if(!scrubbing) return;
+  seekPreview(trackPositionToTime(e.clientX));
+});
+timelineRuler.addEventListener('pointerup', ()=>{ scrubbing = false; });
+timelineRuler.addEventListener('pointercancel', ()=>{ scrubbing = false; });
+
+// --- rendering: export full-resolution cover-cropped photos + an edit plan,
+// and have the local server render it with real ffmpeg (real xfade
+// transitions, real color grading, real Ken Burns zoompan). No live canvas
+// capture, so nothing breaks if the tab is backgrounded or the screen locks.
+const DEFAULT_KEN_BURNS = { zoomFrom: 1, zoomTo: 1.15, panX: 0, panY: 0 };
+
+function makeCoverJpeg(img, w, h, cropFocus){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#000'; cx.fillRect(0,0,w,h); // letterbox background for a zoom < 1 shrink
+  const { sx, sy, sw, sh } = computeCoverRect(img, w, h, cropFocus);
+  const shrink = Math.min(1, (cropFocus && cropFocus.zoom) || 1);
+  let dx = 0, dy = 0, dw = w, dh = h;
+  if(shrink < 1){
+    dw = w*shrink; dh = h*shrink;
+    dx = (w-dw)/2; dy = (h-dh)/2;
+  }
+  cx.drawImage(img, sx,sy,sw,sh, dx,dy,dw,dh);
+  return c.toDataURL('image/jpeg', 0.88).split(',')[1];
+}
+
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+renderBtn.addEventListener('click', ()=>{
+  startRender().catch(err=>{
+    console.error(err);
+    renderBtn.disabled = false;
+    showError('렌더링 실패: ' + (err && err.message ? err.message : err));
+  });
+});
+
+async function startRender(){
+  clearError();
+  clearWarning();
+
+  const active = state.photos.filter(p=>p.included);
+  if(active.length===0) return;
+  renderBtn.disabled = true;
+  downloadLink.style.display = 'none';
+  progressFill.style.width = '15%';
+  frameCounter.textContent = '사진을 서버로 준비하는 중...';
+
+  const { durations, gaps, totalDur } = buildTimeline(active);
+  const W = canvas.width, H = canvas.height, FPS = 30;
+
+  // "Ken Burns" in the manual dropdown is a client-side convenience: no
+  // crossfade between photos, plus a gentle default pan/zoom on any photo
+  // that doesn't already have its own kenBurns from the AI director.
+  const isManualKenBurns = currentTransition === 'kenburns';
+  const transitionForServer = isManualKenBurns ? 'none' : currentTransition;
+
+  const photos = await Promise.all(active.map(async (p,i)=>{
+    if(p.kind === 'video'){
+      return {
+        kind: 'video',
+        videoData: await fileToBase64(p.file),
+        mimeType: p.file.type || 'video/mp4',
+        inPoint: p.inPoint, outPoint: p.outPoint,
+        duration: durations[i],
+        gapAfter: gaps[i] || 0
+      };
+    }
+    return {
+      data: makeCoverJpeg(p.img, W, H, p.cropFocus),
+      duration: durations[i],
+      gapAfter: gaps[i] || 0,
+      kenBurns: p.kenBurns || (isManualKenBurns ? DEFAULT_KEN_BURNS : null)
+    };
+  }));
+
+  // Per-cut transition overrides (e.g. AI set "cut" everywhere except a
+  // "dissolve" between photo 3 and 4) — one entry per cut, aligned with the
+  // final display order; entries left null fall back to transitionForServer.
+  const transitionsOverride = active.slice(0, -1).map(p => p.transitionAfter || null);
+
+  // Every background-music file (the base AUDIO track plus any AUDIO2/3/...
+  // added) is sent as one flat list — audio has no z-order, so the server
+  // just mixes all of them together additively.
+  frameCounter.textContent = '오디오를 준비하는 중...';
+  const audioTracksPayload = [];
+  if(audioFile){
+    audioTracksPayload.push({ data: await fileToBase64(audioFile), mimeType: audioFile.type || 'audio/mpeg' });
+  }
+  for(const track of state.extraAudioTracks){
+    if(track.file) audioTracksPayload.push({ data: await fileToBase64(track.file), mimeType: track.file.type || 'audio/mpeg' });
+  }
+
+  // Each extra CLIP track overlays CLIP wherever it has content — its own
+  // independent sequence, sent with the same cover-cropped-JPEG shape.
+  const extraClipTracksPayload = state.extraClipTracks.map(track=>{
+    const active2 = track.photos.filter(p=>p.included);
+    if(active2.length===0) return [];
+    const { durations: d2, gaps: g2 } = buildTimeline(active2);
+    return active2.map((p,i)=>({
+      data: makeCoverJpeg(p.img, W, H, p.cropFocus),
+      duration: d2[i],
+      gapAfter: g2[i] || 0
+    }));
+  });
+
+  progressFill.style.width = '35%';
+  frameCounter.textContent = '서버에서 렌더링 중... (ffmpeg)';
+
+  const response = await fetch('/api/render', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      width: W, height: H, fps: FPS,
+      transition: transitionForServer, transitions: transitionsOverride, transitionDuration: 0.6,
+      fadeInStart: fadeInState, fadeOutEnd: fadeOutState, fadeDuration: 0.6,
+      colorGrade: colorGradeMode.value,
+      photos, extraClipTracks: extraClipTracksPayload, audioTracks: audioTracksPayload,
+      captions: state.captions.map(c=>({
+        text:c.text, start:c.start, end:c.end, color:c.color, size:c.size, box:c.box, x:c.x, y:c.y,
+        borderWidth:c.borderWidth, borderColor:c.borderColor,
+        shadowOffsetX:c.shadowOffsetX, shadowOffsetY:c.shadowOffsetY, shadowColor:c.shadowColor
+      }))
+    })
+  });
+
+  if(!response.ok){
+    let message = `렌더링 요청 실패 (${response.status})`;
+    try{ const data = await response.json(); if(data && data.error) message = data.error; }catch(e){}
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+  downloadLink.href = url;
+  downloadLink.download = `vibe-cut-${stamp}.mp4`;
+  downloadLink.textContent = `영상 다운로드 (${stamp}) ↓`;
+  downloadLink.style.display = 'inline';
+  progressFill.style.width = '100%';
+
+  // Read the actual rendered duration from the file itself rather than our
+  // own pre-render estimate — transitions overlap and shorten the real
+  // length, so the two can differ.
+  let actualDur = totalDur;
+  try{
+    const probe = document.createElement('video');
+    probe.src = url;
+    await new Promise((resolve,reject)=>{
+      probe.onloadedmetadata = resolve;
+      probe.onerror = reject;
+    });
+    if(Number.isFinite(probe.duration)) actualDur = probe.duration;
+  } catch(e){ /* fall back to the estimate above */ }
+
+  frameCounter.textContent = `완료 — ${active.length}장, ${actualDur.toFixed(1)}s`;
+  renderBtn.disabled = false;
+}
+
+// --- AI curator: dedupe locally, then have the AI screen for eyes-open /
+// natural-expression / clean-background quality before the AI director runs ---
+function clearCuratorError(){ curatorErrorBox.style.display = 'none'; }
+function showCuratorError(msg){ curatorErrorBox.textContent = msg; curatorErrorBox.style.display = 'block'; }
+
+curatorBtn.addEventListener('click', ()=>{
+  runAiCurator().catch(err=>{
+    console.error(err);
+    curatorStatus.textContent = '';
+    // A mid-run failure would otherwise leave the in-flight batch stuck
+    // showing "검토중" forever.
+    state.photos.forEach(p=>{ p.curatorPending = false; });
+    renderFrames();
+    updateActionButtons();
+    showCuratorError('AI 선별 요청 실패: ' + (err && err.message ? err.message : err));
+  });
+});
+
+curatorResetBtn.addEventListener('click', ()=>{
+  state.photos.forEach(p=>{ p.included = !p.lowQuality; p.curatorReason = null; p.curatorPending = false; });
+  curatorSummaryBox.style.display = 'none';
+  clearCuratorError();
+  renderFrames();
+  drawStaticPreview();
+  updateEstimate();
+  updateActionButtons();
+});
+
+// Gemini is asked for pure JSON, but sometimes wraps it in markdown fences
+// or adds a stray sentence before/after despite instructions. Strip fences,
+// try a direct parse, then fall back to slicing out the outermost
+// object/array before giving up — logs the raw text so a real failure is
+// still diagnosable from the console.
+function extractJson(rawText){
+  const cleaned = (rawText || '').replace(/```json|```/g, '').trim();
+  try{ return JSON.parse(cleaned); }
+  catch(e){ /* try to salvage below */ }
+
+  const firstBrace = cleaned.search(/[\[{]/);
+  const lastBrace = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+  if(firstBrace !== -1 && lastBrace > firstBrace){
+    try{ return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)); }
+    catch(e){ /* fall through to the error below */ }
+  }
+
+  console.error('AI response was not valid JSON:', rawText);
+  throw new Error('AI 응답을 해석하지 못했어요. 다시 시도해주세요.');
+}
+
+// Groups photos whose dHash Hamming distance is small (near-duplicate /
+// burst-shot lookalikes) and keeps only the sharpest one from each group.
+// Runs entirely locally — no AI call, no cost.
+function dedupeLocally(photos){
+  const DUP_THRESHOLD = 6; // out of 64 bits; lower = stricter match
+  const groups = [];
+  const assigned = new Set();
+  for(let i=0;i<photos.length;i++){
+    if(assigned.has(photos[i].id)) continue;
+    const group = [photos[i]];
+    assigned.add(photos[i].id);
+    for(let j=i+1;j<photos.length;j++){
+      if(assigned.has(photos[j].id)) continue;
+      if(hammingDistance(photos[i].dHash, photos[j].dHash) <= DUP_THRESHOLD){
+        group.push(photos[j]);
+        assigned.add(photos[j].id);
+      }
+    }
+    groups.push(group);
+  }
+  const keep = [];
+  let duplicatesRemoved = 0;
+  groups.forEach(group=>{
+    if(group.length===1){ keep.push(group[0]); return; }
+    group.sort((a,b)=>b.sharpScore-a.sharpScore);
+    keep.push(group[0]);
+    group.slice(1).forEach(p=>{ p.curatorReason = '중복'; duplicatesRemoved++; });
+  });
+  return { keep, duplicatesRemoved };
+}
+
+async function scoreBatchWithAi(batch, userCriteria){
+  const thumbs = batch.map(p => makeThumbnailBase64(p.img, 240));
+  const warmths = batch.map(p=>p.colorWarmth);
+  const minW = Math.min(...warmths), maxW = Math.max(...warmths);
+  const sharpVals = batch.map(p=>p.sharpScore);
+  const minS = Math.min(...sharpVals), maxS = Math.max(...sharpVals);
+  const pct = (v,min,max)=> max>min ? Math.round((v-min)/(max-min)*100) : 50;
+
+  const hints = batch.map((p,i)=>{
+    const warmLabel = p.colorWarmth > 4 ? 'warm' : (p.colorWarmth < -4 ? 'cool' : 'neutral');
+    return `Photo ${i}: local sharpness percentile ${pct(p.sharpScore,minS,maxS)}/100 within this batch, color tone ${warmLabel}.`;
+  }).join(' ');
+
+  const content = [
+    { type:'text', text:
+      `You are an expert photo curator screening photos for a highlight video. You will see ${batch.length} photo thumbnails, numbered 0 to ${batch.length-1}. ` +
+      `Baseline criteria — ALWAYS apply these regardless of anything else below: eyes must be open (not blinking or closed) for any visible person; the facial expression must look natural or pleasant, not grimacing, mid-blink, or awkward. If a photo has no visible face, judge it only on general photo quality. ` +
+      `Additional user preference (may be empty, meaning no extra preference): "${userCriteria || ''}". ` +
+      `If this preference describes something to EXCLUDE or AVOID (e.g. "제외해줘", "빼줘", a specific color/background/object/person to avoid, a duplicate/similar-looking shot to drop), set "excludeByUserCriteria": true for EVERY photo that matches what should be excluded — this is a HARD exclusion, applied even if no target photo count is set. If the preference only describes something to PREFER (e.g. "따뜻한 색감 위주로"), don't set excludeByUserCriteria — just weigh it into "score" instead. ` +
+      `Local technical hints (use as a hint alongside your own visual judgment, not as ground truth): ${hints} ` +
+      `Respond with ONLY a JSON array, no markdown fences, no commentary, with exactly ${batch.length} entries matching this schema: ` +
+      `[{"i":<int, photo index>,"eyesOpen":<bool>,"badExpression":<bool, true if the expression is unnatural/grimacing/mid-blink/unflattering>,"backgroundOk":<bool, true if the background is reasonably clean and not distracting>,"excludeByUserCriteria":<bool, see instructions above>,"score":<number 0-10, overall suitability for the video factoring in the baseline and the user preference>}]`
+    }
+  ];
+  batch.forEach((p,i)=>{
+    content.push({ type:'text', text:`Photo ${i}:` });
+    content.push({ type:'image', mediaType:'image/jpeg', data: thumbs[i] });
+  });
+
+  const response = await fetch('/api/ai-direct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, maxOutputTokens: 1500 })
+  });
+  const data = await response.json();
+  if(!response.ok){
+    throw new Error(data.error || `API 요청 실패 (${response.status})`);
+  }
+  const parsed = extractJson(data.text);
+  if(!Array.isArray(parsed)) throw new Error('AI 선별 응답 형식이 올바르지 않아요.');
+  return parsed;
+}
+
+async function runAiCurator(){
+  clearCuratorError();
+  curatorSummaryBox.style.display = 'none';
+  if(state.photos.length===0) return;
+
+  curatorBtn.disabled = true;
+  aiDirectBtn.disabled = true;
+  curatorStatus.textContent = '중복 사진을 찾는 중...';
+
+  // reset any previous curator decisions before re-running
+  state.photos.forEach(p=>{ p.curatorReason = null; p.curatorPending = false; });
+
+  const { keep: candidates, duplicatesRemoved } = dedupeLocally(state.photos);
+  renderFrames(); // local duplicate decisions are already final — show them now
+
+  const BATCH_SIZE = 15;
+  const batches = [];
+  for(let i=0;i<candidates.length;i+=BATCH_SIZE){ batches.push(candidates.slice(i,i+BATCH_SIZE)); }
+
+  const userCriteria = curatorPrompt.value.trim();
+  let eyesClosedCount = 0, badExprCount = 0, userExcludedCount = 0;
+
+  for(let b=0; b<batches.length; b++){
+    curatorStatus.textContent = `AI가 사진을 검토하는 중... (${b+1}/${batches.length}배치)`;
+    const batch = batches[b];
+    // Light up the batch being sent so the strip shows which photos the AI is
+    // looking at right now, then repaint again the moment its verdict lands.
+    batch.forEach(p=>{ p.curatorPending = true; });
+    renderFrames();
+    const results = await scoreBatchWithAi(batch, userCriteria);
+    batch.forEach(p=>{ p.curatorPending = false; });
+    results.forEach(r=>{
+      const photo = batch[r.i];
+      if(!photo) return;
+      photo.curatorScore = typeof r.score === 'number' ? r.score : 5;
+      // Hard exclusions — these apply even with no target count set.
+      if(r.eyesOpen === false){ photo.curatorReason = '눈감음'; eyesClosedCount++; }
+      else if(r.badExpression === true){ photo.curatorReason = '표정'; badExprCount++; }
+      else if(r.excludeByUserCriteria === true){ photo.curatorReason = '요청기준'; userExcludedCount++; }
+      // Soft signal only — noted, but doesn't remove the photo unless a
+      // target count later trims by score.
+      else if(r.backgroundOk === false){ photo.curatorReason = '배경'; }
+    });
+    // Grey out this batch's hard exclusions immediately. The authoritative
+    // included/excluded pass still runs after the loop (target-count trimming
+    // needs every batch's score first) — this is a live preview of decisions
+    // that pass recomputes anyway, not a competing source of truth.
+    batch.forEach(p=>{
+      if(p.curatorReason && p.curatorReason !== '배경') p.included = false;
+    });
+    renderFrames();
+    if(b < batches.length-1){ await new Promise(r=>setTimeout(r, 1200)); } // stay under free-tier rate limits
+  }
+
+  // photos that passed the hard baseline (eyes/expression/user-requested exclusions)
+  const passed = candidates.filter(p=>!p.curatorReason || p.curatorReason==='배경');
+  passed.sort((a,b)=>(b.curatorScore||0)-(a.curatorScore||0));
+
+  const targetCount = parseInt(curatorCount.value);
+  let kept = passed;
+  let trimmedCount = 0;
+  if(Number.isFinite(targetCount) && targetCount > 0 && targetCount < passed.length){
+    kept = passed.slice(0, targetCount);
+    passed.slice(targetCount).forEach(p=>{ p.curatorReason = '순위밖'; });
+    trimmedCount = passed.length - targetCount;
+  }
+  const keptIds = new Set(kept.map(p=>p.id));
+
+  state.photos.forEach(p=>{
+    p.included = keptIds.has(p.id);
+  });
+
+  renderFrames();
+  drawStaticPreview();
+  updateEstimate();
+  updateActionButtons();
+  curatorStatus.textContent = '';
+
+  const parts = [`총 ${state.photos.length}장 중 ${kept.length}장 선택`];
+  if(duplicatesRemoved) parts.push(`중복 ${duplicatesRemoved}장 제외`);
+  if(eyesClosedCount) parts.push(`눈감음 ${eyesClosedCount}장 제외`);
+  if(badExprCount) parts.push(`표정 부자연스러움 ${badExprCount}장 제외`);
+  if(userExcludedCount) parts.push(`요청하신 기준에 해당 ${userExcludedCount}장 제외`);
+  if(trimmedCount) parts.push(`목표 장수 초과분 ${trimmedCount}장 제외`);
+  if(Number.isFinite(targetCount) && targetCount > 0 && targetCount > passed.length){
+    parts.push(`⚠️ 기준을 통과한 사진이 목표(${targetCount}장)보다 적어서 ${passed.length}장만 선택됐어요.`);
+  }
+  curatorSummaryBox.textContent = '🔍 ' + parts.join(' · ');
+  curatorSummaryBox.style.display = 'block';
+}
+
+// --- AI director: AI looks at the photos and decides the edit ---
+function makeThumbnailBase64(img, maxW){
+  const scale = Math.min(1, maxW / img.width);
+  const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  cx.drawImage(img, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.6).split(',')[1];
+}
+
+function clearAiError(){ aiErrorBox.style.display = 'none'; }
+function showAiError(msg){ aiErrorBox.textContent = msg; aiErrorBox.style.display = 'block'; }
+
+aiDirectBtn.addEventListener('click', ()=>{
+  runAiDirector().catch(err=>{
+    console.error(err);
+    aiStatus.textContent = '';
+    aiDirectBtn.disabled = false;
+    showAiError('AI 편집 요청 실패: ' + (err && err.message ? err.message : err));
+  });
+});
+
+async function runAiDirector(){
+  clearAiError();
+  aiSummaryBox.style.display = 'none';
+  const active = state.photos.filter(p=>p.included);
+  if(active.length===0) return;
+  const MAX_PHOTOS = 24;
+  const chosen = active.slice(0, MAX_PHOTOS);
+  if(active.length > MAX_PHOTOS){
+    showAiError(`사진이 많아서 처음 ${MAX_PHOTOS}장만 AI에게 보여줬어요. 나머지는 순서 그대로 뒤에 붙습니다.`);
+  }
+
+  aiDirectBtn.disabled = true;
+  aiStatus.textContent = '사진을 분석하는 중...';
+
+  const thumbs = chosen.map(p => makeThumbnailBase64(p.img, 320));
+
+  const userDirection = aiPrompt.value.trim() || '자연스럽고 감성적인 느낌으로 편집해줘.';
+
+  const content = [
+    { type:'text', text:
+      `You are an expert short-form video editor. You will see ${chosen.length} photo thumbnails, in their current order (Photo 0 to Photo ${chosen.length-1}). ` +
+      `The user's creative direction: "${userDirection}". ` +
+      `Decide the best order to tell a compelling visual story, how long each photo should be shown (0.6 to 6.0 seconds), and an overall color grade from: none, warm, cool, vintage, bw, vivid. ` +
+      `Also decide three SEPARATE things about motion/transitions — do not conflate them: ` +
+      `(1) "transition": the actual video-editing transition effect used EVERY time the video cuts from one photo to the next. This is rendered by real ffmpeg "xfade" transitions, so pick whichever name best matches what the user described (these are ALL real, fully supported effects — pick freely, don't limit yourself to the obvious ones): ` +
+      `"none" or "cut" (instant hard cut, no effect — pick this if the user asked for no transition or didn't mention one), ` +
+      `"fade" (smooth crossfade / 크로스페이드 — a clean alpha blend), "dissolve" (grainy/random-pixel dissolve / 디졸브 — a more textured, filmic blend, distinct from "fade"), ` +
+      `"wipeleft","wiperight","wipeup","wipedown" (directional wipe / 와이프), ` +
+      `"slideleft","slideright","slideup","slidedown" (one photo slides the other away / 슬라이드), ` +
+      `"circleopen","circleclose","circlecrop","rectcrop" (circle or rectangle reveal / 서클 와이프), ` +
+      `"vertopen","vertclose","horzopen","horzclose" (open/close from center, vertical or horizontal), ` +
+      `"diagtl","diagtr","diagbl","diagbr" (diagonal wipe from a corner), ` +
+      `"pixelize" (pixelated dissolve), "radial" (clock-hand radial wipe), "hblur" (horizontal blur blend), ` +
+      `"smoothleft","smoothright","smoothup","smoothdown" (smoother directional blend), ` +
+      `"fadeblack","fadewhite","fadegrays" (fade through black/white/grayscale), ` +
+      `"distance","zoomin","squeezeh","squeezev" (more stylized zoom/squeeze blends), ` +
+      `"hlslice","hrslice","vuslice","vdslice" (sliced-strip wipe), ` +
+      `"hlwind","hrwind","vuwind","vdwind" (wind-swept wipe), ` +
+      `"coverleft","coverright","coverup","coverdown","revealleft","revealright","revealup","revealdown" (one photo covers/reveals the other while sliding), ` +
+      `"wipetl","wipetr","wipebl","wipebr" (wipe from a corner). ` +
+      `"transition" is the DEFAULT used for every cut unless overridden below. ` +
+      `(2) "transitions" (OPTIONAL — only include this field if the user asked for a DIFFERENT transition on a SPECIFIC cut, e.g. "컷으로 가다가 3번째에서 4번째 넘어갈 때만 디졸브 써줘"): an array of exactly ${chosen.length-1} transition names, one per cut, in FINAL timeline order (transitions[k] is the effect used when cutting from the photo at final position k to the photo at final position k+1 — i.e. transitions[0] is between the 1st and 2nd photo shown, transitions[1] between the 2nd and 3rd, and so on). Every entry must be one of the same transition names listed above. If the user only wants one uniform style everywhere, omit "transitions" entirely and just set "transition". ` +
+      `(3) "fadeInStart" and "fadeOutEnd": UNRELATED to transitions above — they control only the very beginning and very end of the WHOLE video, fading from/to a black screen (this is what "페이드인" at the start and "페이드아웃" at the end mean when the user asks for the first scene to fade in or the last scene to fade out). Set "fadeInStart": true only if the user asked the video to start by fading in from black. Set "fadeOutEnd": true only if the user asked the video to end by fading out to black. Both default to false if not requested. ` +
+      `(4) "kenBurns" (per-photo slow pan & zoom, aka Ken Burns effect / 케빈 번즈 효과): also fully independent of transitions — every photo can have its own gentle pan/zoom regardless of which transition plays between photos. ` +
+      `Respond with ONLY valid JSON, no markdown fences, no extra commentary, matching exactly this schema: ` +
+      `{"order":[int,...],"durations":[number,...],"transition":string,"transitions":[string,...]|undefined,"fadeInStart":boolean,"fadeOutEnd":boolean,"colorGrade":"none"|"warm"|"cool"|"vintage"|"bw"|"vivid","kenBurns":[{"zoomFrom":number,"zoomTo":number,"panX":number,"panY":number},...],"summary":"a short Korean sentence explaining your creative choices, only mentioning effects you actually set to true/non-default in the JSON above"}. ` +
+      `"transition" and every entry of "transitions" must be exactly one of the transition names listed above (lowercase, no other text). ` +
+      `"order" must be a permutation of 0..${chosen.length-1}. "durations" must have exactly ${chosen.length} entries, aligned with "order" (i.e. durations[i] is the duration for the photo at order[i]). "kenBurns" must also have exactly ${chosen.length} entries aligned with "order", with zoom values between 1.0 and 1.3 and panX/panY between -0.12 and 0.12; include reasonable kenBurns values even if the user didn't explicitly ask for pan/zoom.`
+    }
+  ];
+  chosen.forEach((p, i)=>{
+    content.push({ type:'text', text:`Photo ${i}:` });
+    content.push({ type:'image', mediaType:'image/jpeg', data: thumbs[i] });
+  });
+
+  aiStatus.textContent = 'AI가 편집 방향을 정하는 중...';
+
+  const response = await fetch('/api/ai-direct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, maxOutputTokens: 2000 })
+  });
+
+  const data = await response.json();
+  if(!response.ok){
+    throw new Error(data.error || `API 요청 실패 (${response.status})`);
+  }
+  const parsed = extractJson(data.text);
+
+  applyAiEdit(chosen, parsed);
+  aiStatus.textContent = '';
+  aiDirectBtn.disabled = false;
+  aiSummaryBox.textContent = '🎬 ' + (parsed.summary || 'AI가 편집 설정을 적용했어요.');
+  aiSummaryBox.style.display = 'block';
+}
+
+function applyAiEdit(chosen, parsed){
+  const order = Array.isArray(parsed.order) ? parsed.order : chosen.map((_,i)=>i);
+  const durations = Array.isArray(parsed.durations) ? parsed.durations : null;
+  const kenBurnsArr = Array.isArray(parsed.kenBurns) ? parsed.kenBurns : null;
+  // Per-cut transition overrides, e.g. "cut everywhere except a dissolve
+  // between the 3rd and 4th photo" — transitionsArr[pos] is the transition
+  // FROM the photo at final position pos TO the one at pos+1.
+  const transitionsArr = Array.isArray(parsed.transitions) ? parsed.transitions : null;
+
+  const reordered = order.map((origIdx, pos)=>{
+    const photo = chosen[origIdx];
+    if(!photo) return null;
+    if(durations && typeof durations[pos] === 'number'){
+      photo.duration = Math.max(0.4, Math.min(8, durations[pos]));
+    }
+    if(kenBurnsArr && kenBurnsArr[pos]){
+      const kb = kenBurnsArr[pos];
+      photo.kenBurns = {
+        zoomFrom: kb.zoomFrom || 1,
+        zoomTo: kb.zoomTo || 1.15,
+        panX: Math.max(-0.15, Math.min(0.15, kb.panX||0)),
+        panY: Math.max(-0.15, Math.min(0.15, kb.panY||0))
+      };
+    }
+    const override = transitionsArr && transitionsArr[pos];
+    photo.transitionAfter = (typeof override === 'string' && VALID_TRANSITIONS.has(override)) ? override : null;
+    return photo;
+  }).filter(Boolean);
+
+  // rebuild state.photos: reordered chosen photos first, then any remaining
+  // included photos beyond the AI's window, then excluded photos, all keeping
+  // their relative order.
+  const chosenIds = new Set(chosen.map(p=>p.id));
+  const remainder = state.photos.filter(p=>!chosenIds.has(p.id));
+  state.photos = [...reordered, ...remainder];
+
+  if(parsed.transition && VALID_TRANSITIONS.has(parsed.transition)){
+    setTransitionValue(parsed.transition);
+  }
+  if(parsed.colorGrade && COLOR_GRADES.hasOwnProperty(parsed.colorGrade)){
+    colorGradeMode.value = parsed.colorGrade;
+  }
+  fadeInState = typeof parsed.fadeInStart === 'boolean' ? parsed.fadeInStart : false;
+  fadeOutState = typeof parsed.fadeOutEnd === 'boolean' ? parsed.fadeOutEnd : false;
+
+  renderFrames();
+  drawStaticPreview();
+  updateEstimate();
+}
+
+// --- Starter prompts for the AI director ---
+//
+// A blank textarea is the hardest possible thing to answer, so these give a
+// one-click starting point. Each one is phrased in terms the director prompt
+// actually acts on — order, per-photo duration, transition, colour grade,
+// fade in/out, pan & zoom — rather than vague mood words, so the result
+// visibly matches the label that was picked.
+const DIRECTOR_PRESETS = [
+  { label:'따뜻한 감성',
+    prompt:'따뜻하고 감성적인 분위기로 만들어줘. 전환은 크로스페이드로 부드럽게, 색감은 따뜻하게. 사진마다 천천히 확대되는 움직임을 넣고, 인물 사진을 먼저 보여준 뒤 풍경으로 마무리해줘.' },
+  { label:'경쾌한 하이라이트',
+    prompt:'밝고 경쾌한 분위기로 만들어줘. 사진을 빠르게 넘기고 전환은 컷으로 리듬감 있게, 색감은 선명하게 해줘.' },
+  { label:'여행 브이로그',
+    prompt:'여행 브이로그처럼 만들어줘. 풍경 사진으로 시작해서 인물 사진으로 이어지게 배치하고, 전환은 슬라이드로 시원하게, 색감은 선명하게 해줘.' },
+  { label:'아이 성장 기록',
+    prompt:'아이의 성장 기록처럼 부드럽고 사랑스럽게 만들어줘. 사진을 넉넉하게 오래 보여주고 전환은 크로스페이드로, 색감은 따뜻하게, 은은한 확대 움직임을 넣어줘.' },
+  { label:'빈티지 필름',
+    prompt:'오래된 필름처럼 빈티지한 느낌으로 만들어줘. 전환은 디졸브로, 색감은 빈티지로, 전체적으로 느리고 차분하게 해줘.' },
+  { label:'기념일 · 웨딩',
+    prompt:'특별한 날의 기록처럼 우아하게 만들어줘. 검은 화면에서 페이드인으로 시작해서 마지막에 페이드아웃으로 끝내고, 전환은 크로스페이드로 부드럽게, 색감은 따뜻하게 해줘.' }
+];
+
+// Starter criteria for the curator. The curator prompt treats a preference as
+// either a soft weighting or a hard exclusion depending on how it is phrased,
+// so these are worded to land on the intended side of that line: "위주로
+// 골라줘" nudges the score, "제외해줘" drops the photo outright.
+const CURATOR_PRESETS = [
+  { label:'인물 위주로',
+    prompt:'사람이 잘 나온 사진 위주로 골라줘. 표정이 자연스럽고 인물이 또렷하게 나온 사진을 우선해줘.' },
+  { label:'풍경 위주로',
+    prompt:'풍경이나 장소가 잘 담긴 사진 위주로 골라줘.' },
+  { label:'밝고 선명하게',
+    prompt:'밝고 선명한 사진 위주로 골라줘. 어둡거나 흔들린 사진은 제외해줘.' },
+  { label:'따뜻한 색감',
+    prompt:'따뜻한 색감의 사진 위주로 골라줘.' },
+  { label:'음식 사진 빼기',
+    prompt:'음식만 찍힌 사진은 제외해줘.' },
+  { label:'화면 캡처 빼기',
+    prompt:'휴대폰 화면 캡처나 문서, 영수증처럼 추억과 관계없는 사진은 제외해줘.' }
+];
+
+// Two cards use this now, so the wiring lives in one place.
+function wirePresetChips(container, textarea, presets){
+  function sync(){
+    const current = textarea.value.trim();
+    [...container.children].forEach((chip, i)=>{
+      chip.classList.toggle('active', presets[i].prompt === current);
+    });
+  }
+  presets.forEach(preset=>{
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'preset-chip';
+    chip.textContent = preset.label;
+    chip.title = preset.prompt;
+    chip.addEventListener('click', ()=>{
+      textarea.value = preset.prompt;
+      sync();
+      textarea.focus();
+    });
+    container.appendChild(chip);
+  });
+  // Editing the text by hand drops the highlight, so a selected chip never
+  // claims to describe something the box no longer says.
+  textarea.addEventListener('input', sync);
+}
+
+wirePresetChips(document.getElementById('promptPresets'), aiPrompt, DIRECTOR_PRESETS);
+wirePresetChips(document.getElementById('curatorPresets'), curatorPrompt, CURATOR_PRESETS);
+
+// --- Sign-in screen, first-run launcher, pricing ---
+//
+// The sign-in screen is a front-end facade: there is no account backend, so it
+// records only the e-mail (to personalise the header) and never the password.
+// Everything below is presentation; nothing here gates the renderer.
+const AUTH_KEY = 'vibeCutUser';
+const authOverlay = document.getElementById('authOverlay');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authError = document.getElementById('authError');
+const accountChip = document.getElementById('accountChip');
+const accountEmailEl = document.getElementById('accountEmail');
+const onboardModal = document.getElementById('onboardModal');
+const onboardDrop = document.getElementById('onboardDrop');
+const pricingModal = document.getElementById('pricingModal');
+
+function storedUser(){
+  try{ return localStorage.getItem(AUTH_KEY); }catch(e){ return null; }
+}
+function syncAccountUI(){
+  const user = storedUser();
+  accountChip.hidden = !user;
+  if(user) accountEmailEl.textContent = user;
+}
+
+// The launcher only makes sense on an empty project — once there are photos on
+// the timeline it would just be in the way.
+function maybeShowOnboarding(){
+  if(state.photos.length === 0) onboardModal.classList.add('open');
+}
+
+function finishSignIn(email){
+  if(email){ try{ localStorage.setItem(AUTH_KEY, email); }catch(e){} }
+  authOverlay.classList.remove('open');
+  authPassword.value = ''; // never retained, not even in the DOM
+  syncAccountUI();
+  maybeShowOnboarding();
+}
+
+document.getElementById('authSubmit').addEventListener('click', ()=>{
+  const email = authEmail.value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    authError.textContent = '이메일 주소를 확인해주세요.';
+    return;
+  }
+  authError.textContent = '';
+  finishSignIn(email);
+});
+authPassword.addEventListener('keydown', e=>{
+  if(e.key === 'Enter') document.getElementById('authSubmit').click();
+});
+authEmail.addEventListener('keydown', e=>{
+  if(e.key === 'Enter') document.getElementById('authSubmit').click();
+});
+document.getElementById('authGuest').addEventListener('click', ()=> finishSignIn(null));
+
+document.getElementById('signOutBtn').addEventListener('click', ()=>{
+  try{ localStorage.removeItem(AUTH_KEY); }catch(e){}
+  syncAccountUI();
+  authEmail.value = ''; authPassword.value = ''; authError.textContent = '';
+  authOverlay.classList.add('open');
+});
+
+// Launcher actions. Each one performs a real action — no decorative buttons.
+function pickFiles(accept){
+  fileInput.accept = accept;
+  onboardModal.classList.remove('open');
+  fileInput.click();
+}
+onboardDrop.addEventListener('click', ()=> pickFiles('image/*,video/*'));
+document.getElementById('onboardPhotos').addEventListener('click', ()=> pickFiles('image/*'));
+document.getElementById('onboardVideos').addEventListener('click', ()=> pickFiles('video/*'));
+document.getElementById('onboardPricing').addEventListener('click', ()=>{
+  onboardModal.classList.remove('open');
+  pricingModal.classList.add('open');
+});
+document.getElementById('onboardClose').addEventListener('click', ()=> onboardModal.classList.remove('open'));
+
+onboardDrop.addEventListener('dragover', e=>{ e.preventDefault(); onboardDrop.classList.add('drag'); });
+onboardDrop.addEventListener('dragleave', ()=> onboardDrop.classList.remove('drag'));
+onboardDrop.addEventListener('drop', e=>{
+  e.preventDefault();
+  onboardDrop.classList.remove('drag');
+  onboardModal.classList.remove('open');
+  handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById('pricingOpen').addEventListener('click', ()=> pricingModal.classList.add('open'));
+document.getElementById('pricingClose').addEventListener('click', ()=> pricingModal.classList.remove('open'));
+[pricingModal, onboardModal].forEach(m=>{
+  m.addEventListener('click', e=>{ if(e.target === m) m.classList.remove('open'); }); // click the backdrop to dismiss
+});
+document.addEventListener('keydown', e=>{
+  if(e.key !== 'Escape') return;
+  pricingModal.classList.remove('open');
+  onboardModal.classList.remove('open');
+});
+
+syncAccountUI();
+if(storedUser()) maybeShowOnboarding();
+else authOverlay.classList.add('open');
+</script>
+</body>
+</html>

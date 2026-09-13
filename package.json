@@ -1,0 +1,17 @@
+{
+  "name": "vibe-cut-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal local server for vibe-cut.html — serves the app and proxies the Claude API call so the Anthropic API key never touches the browser.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
