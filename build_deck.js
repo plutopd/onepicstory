@@ -709,7 +709,7 @@ function bullets(s, items, opts) {
     fontFace: F, fontSize: 12, bold: true, color: CREAM, charSpacing: 1.5,
     isTextBox: true, margin: 0,
   });
-  ["지인이 아닌 실사용자 확보", "배포 링크 공개와 접속 점검", "무료 2회 이후 유료 전환 실험"].forEach((t, i) => {
+  ["지인이 아닌 실사용자 확보", "두 번째 영상까지 만드는지 관찰", "무료 2회 이후 유료 전환 실험"].forEach((t, i) => {
     const y = colY + 0.78 + i * 0.44;
     dot(s, 1.38, y + 0.1, 0.09, CREAM);
     s.addText(t, {
@@ -735,25 +735,25 @@ function bullets(s, items, opts) {
     });
   });
 
-  card(s, 1.0, 5.85, 11.0, 0.8, CREAM);
-  s.addText(
-    [
-      { text: "배포 주소   ", options: { bold: true, color: ACCENT } },
-      { text: "( 배포 후 입력 )", options: { color: MUTED } },
-    ],
-    {
-      x: 1.38, y: 5.85, w: 10.2, h: 0.8,
-      fontFace: F, fontSize: 13,
-      valign: "middle", isTextBox: true, margin: 0,
-    }
-  );
+  // The live link is a graded deliverable, so it gets read from the back row.
+  card(s, 1.0, 5.75, 11.0, 0.95, CREAM);
+  s.addText("지금 접속해 보실 수 있습니다", {
+    x: 1.4, y: 5.88, w: 4.4, h: 0.28,
+    fontFace: F, fontSize: 11, bold: true, color: MUTED, charSpacing: 1,
+    isTextBox: true, margin: 0,
+  });
+  s.addText("vibe-cut.onrender.com", {
+    x: 1.4, y: 6.14, w: 7.2, h: 0.42,
+    fontFace: F, fontSize: 21, bold: true, color: ACCENT,
+    isTextBox: true, margin: 0,
+  });
 
   s.addNotes(
     "[15초]\n" +
     "사진첩에 잠들어 있는 여행을 영상 한 편으로 남기는 것이 One Pick Story입니다.\n" +
     "다음 단계로는 지인이 아닌 실사용자를 확보하고, 유료 전환을 실험해 보려고 합니다.\n" +
     "감사합니다.\n\n" +
-    "※ 배포 주소를 넣은 뒤 이 줄을 수정할 것."
+    "※ 발표 직전에 링크를 한 번 열어 서버를 깨워 둘 것 — 무료 플랜은 15분 유휴 후 잠들어 첫 접속이 50초 이상 걸린다."
   );
 }
 
