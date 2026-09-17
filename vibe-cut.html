@@ -130,20 +130,16 @@
     transition:border-color .15s, color .15s;
   }
   .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+  /* .theme-toggle sets display:inline-flex, which outranks the [hidden]
+     attribute's own display:none — so state it explicitly. */
+  .account-chip[hidden]{display:none;}
   .account-chip{cursor:default; gap:8px;}
   .account-chip:hover{border-color:var(--line); color:var(--muted);}
   .account-signout{color:var(--accent-text); cursor:pointer; border-left:1px solid var(--line); padding-left:8px;}
   .account-signout:hover{text-decoration:underline;}
-  .eyebrow{
-    display:inline-flex; align-items:center; gap:6px;
-    font-family:'IBM Plex Mono',monospace; color:var(--accent-text);
-    font-size:11px; letter-spacing:.1em; text-transform:uppercase;
-    padding:5px 12px; border:1px solid var(--accent-soft); border-radius:999px;
-    background:var(--accent-tint); margin-bottom:16px;
-  }
   h1{
     font-family:'Space Grotesk',sans-serif; font-size:40px; line-height:1.18;
-    margin:0 0 12px; letter-spacing:-0.02em; max-width:640px;
+    margin:22px 0 12px; letter-spacing:-0.02em; max-width:640px;
   }
   h1 .grad{
     background:linear-gradient(90deg, var(--ai), var(--ai-bright));
@@ -581,6 +577,37 @@
     max-height:calc(100vh - 48px); overflow-y:auto;
   }
   .onboard-card{max-width:600px;}
+  .guest-card{max-width:460px; text-align:center;}
+  .guest-card h2{font-size:20px; line-height:1.4; word-break:keep-all;}
+  .guest-icon{
+    width:46px; height:46px; margin:0 auto 16px; border-radius:50%;
+    display:grid; place-items:center; font-size:24px; font-weight:800;
+    background:var(--accent-tint); color:var(--accent-text);
+    border:1px solid var(--accent-soft);
+  }
+  .guest-actions{display:flex; flex-direction:column; gap:9px; margin-top:22px;}
+
+  /* Payment marks. Brand colours are literals rather than theme tokens — a
+     logo has to stay itself in both light and dark. */
+  .pay-row{
+    display:flex; flex-wrap:wrap; justify-content:center; align-items:center;
+    gap:9px; margin-top:24px;
+  }
+  .pay-chip{
+    display:inline-flex; align-items:center; gap:7px; height:36px;
+    padding:0 14px; border-radius:9px; border:1px solid transparent;
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:700;
+    letter-spacing:-0.01em; white-space:nowrap;
+  }
+  .pay-chip svg{display:block; flex:none;}
+  .pay-kakao{background:#FEE500; border-color:#EDD000; color:#191600;}
+  .pay-naver{background:#03C75A; border-color:#02B351; color:#fff;}
+  .pay-apple{background:#111318; border-color:#111318; color:#fff;}
+  .pay-card {background:#fff;    border-color:#DDE1E8; color:#23262E;}
+  .pay-visa {background:#fff;    border-color:#DDE1E8; color:#1A1F71;
+             font-size:15px; font-style:italic; font-weight:800; letter-spacing:.02em;}
+  /* On a dark card the black Apple mark loses its edge; give it one back. */
+  :root[data-theme="dark"] .pay-apple{border-color:#3C4049;}
   .pricing-card{max-width:880px;}
   .onboard-card h2, .pricing-card h2{
     font-family:'Space Grotesk',sans-serif; font-size:24px;
@@ -654,6 +681,16 @@
   .msgbox{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;display:none;}
   .msgbox.error{background:rgba(217,99,79,0.12);border:1px solid var(--bad);}
   .msgbox.warn{background:var(--accent-tint);border:1px solid var(--accent);}
+  /* The render gate is a standing condition, not a transient error, so it is
+     always visible while browsing as a guest rather than shown on failure. */
+  .msgbox.gate-note[hidden]{display:none;}
+  .gate-note{display:block; color:var(--text-2); line-height:1.6;}
+  .gate-note b{color:var(--accent-text);}
+  .gate-note-cta{
+    margin-left:6px; border:none; background:none; padding:0;
+    font:inherit; font-weight:700; color:var(--accent-text);
+    text-decoration:underline; cursor:pointer;
+  }
 </style>
 <script>
 // Runs before the body is parsed so a saved dark theme is already applied at
@@ -681,8 +718,7 @@ try{
         <span class="account-signout" id="signOutBtn" role="button" tabindex="0">로그아웃</span>
       </span>
     </div>
-    <div class="eyebrow">BUILD 2026-08-29-AI</div>
-    <h1><span class="grad">AI</span>에게 요청하여 나만의 동영상을 손쉽게 만들어보세요</h1>
+    <h1><span class="grad">AI</span>에게 요청하여 나만의 동영상을<br>손쉽게 만들어보세요</h1>
     <p>원하는 프롬프트를 입력하거나, 기본으로 설정된 프롬프트를 골라,<br>자신의 <span class="mint">추억을 간직해보세요.</span></p>
   </header>
 
@@ -867,6 +903,11 @@ try{
       </div>
       <a class="download" id="downloadLink" style="display:none;">영상 다운로드 ↓</a>
     </div>
+    <div id="renderGateNote" class="msgbox warn gate-note" hidden>
+      <b>로그인을 하지 않을 시 렌더링이 불가합니다.</b>
+      편집과 미리보기는 그대로 사용할 수 있어요.
+      <button type="button" class="gate-note-cta" id="gateSignIn">로그인하기</button>
+    </div>
     <div id="errorBox" class="msgbox error"></div>
     <div id="warnBox" class="msgbox warn"></div>
     <div class="hint">렌더링은 이 브라우저 탭이 아니라 로컬 ffmpeg 서버에서 진행돼요 — 렌더링 중에는 다른 앱으로 전환하거나 폰 화면을 꺼도 괜찮아요.</div>
@@ -986,6 +1027,21 @@ try{
   </div>
 </div>
 
+<!-- Shown the moment someone chooses to look around without signing in.
+     Rendering is the single thing guest mode cannot do, so it is said up front
+     instead of letting them build a whole timeline and meet a dead button. -->
+<div class="onboard-modal" id="guestModal">
+  <div class="onboard-card guest-card">
+    <div class="guest-icon">!</div>
+    <h2>로그인을 하지 않을 시 렌더링이 불가합니다</h2>
+    <p class="onboard-sub">둘러보기에서도 사진 업로드와 AI 선별, 편집, 미리보기는 모두 사용할 수 있어요.<br>완성한 영상을 <b>내보내려면 로그인</b>이 필요합니다.</p>
+    <div class="guest-actions">
+      <button class="primary" id="guestSignIn">로그인하고 시작하기</button>
+      <button class="btn-ghost-sm" id="guestContinue">그냥 둘러볼게요</button>
+    </div>
+  </div>
+</div>
+
 <!-- First-run launcher: gives a brand-new visitor one obvious way to start
      instead of dropping them into a five-section form. -->
 <div class="onboard-modal" id="onboardModal">
@@ -1070,7 +1126,41 @@ try{
         <button class="btn-ghost-sm plan-cta">선택하기</button>
       </div>
     </div>
-    <p class="auth-note" style="text-align:center;">데모 화면이라 결제는 연결되어 있지 않습니다.</p>
+    <div class="pay-row" role="list" aria-label="지원 예정 결제 수단">
+      <span class="pay-chip pay-kakao" role="listitem">
+        <svg width="17" height="16" viewBox="0 0 17 16" aria-hidden="true">
+          <ellipse cx="8.5" cy="7" rx="7.5" ry="6" fill="#191600"/>
+          <path d="M5.2 12.6 3.9 15.6l3.5-2.3z" fill="#191600"/>
+          <ellipse cx="8.5" cy="7" rx="7.5" ry="6" fill="#FEE500"/>
+          <path d="M5.4 12.2 4.2 15l3.3-2.2z" fill="#FEE500"/>
+          <text x="8.5" y="9.4" text-anchor="middle" font-family="Inter,sans-serif"
+                font-size="6.4" font-weight="800" fill="#191600">pay</text>
+        </svg>
+        카카오페이
+      </span>
+      <span class="pay-chip pay-naver" role="listitem">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <rect width="14" height="14" rx="3" fill="#fff"/>
+          <path d="M4 10.5V3.5h2.1l2 3.1V3.5H10v7H7.9l-2-3.1v3.1z" fill="#03C75A"/>
+        </svg>
+        네이버페이
+      </span>
+      <span class="pay-chip pay-apple" role="listitem">
+        <svg width="13" height="15" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+          <path d="M17.05 12.53c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.71-3.19-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.18-1.54 2.67-.39 6.62 1.11 8.79.73 1.06 1.6 2.25 2.75 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.67-2.14.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.34-3.54zM14.88 5.9c.61-.74 1.02-1.77.91-2.8-.88.04-1.94.59-2.57 1.32-.56.65-1.05 1.7-.92 2.7.98.08 1.98-.5 2.58-1.22z"/>
+        </svg>
+        Apple Pay
+      </span>
+      <span class="pay-chip pay-card" role="listitem">
+        <svg width="28" height="17" viewBox="0 0 28 17" aria-hidden="true">
+          <circle cx="10.5" cy="8.5" r="7.5" fill="#EB001B"/>
+          <circle cx="17.5" cy="8.5" r="7.5" fill="#F79E1B" fill-opacity=".82"/>
+        </svg>
+        Mastercard
+      </span>
+      <span class="pay-chip pay-visa" role="listitem">VISA</span>
+    </div>
+    <p class="auth-note" style="text-align:center; margin-top:12px;">준비 중인 결제 수단이에요.</p>
   </div>
 </div>
 
@@ -1138,6 +1228,23 @@ const customSecondsField = document.getElementById('customSecondsField');
 const customSeconds = document.getElementById('customSeconds');
 const errorBox = document.getElementById('errorBox');
 const warnBox = document.getElementById('warnBox');
+const renderGateNote = document.getElementById('renderGateNote');
+
+// Sign-in state. Declared here rather than beside the auth screen further down
+// because updateEstimate() runs during initial evaluation and needs it.
+const AUTH_KEY = 'vibeCutUser';
+function storedUser(){
+  try{ return localStorage.getItem(AUTH_KEY); }catch(e){ return null; }
+}
+function isSignedIn(){ return !!storedUser(); }
+
+// Guest mode is a full sandbox except for rendering: it is the only action that
+// spends server time, so it is the only one behind sign-in.
+function syncRenderGate(){
+  const guest = !isSignedIn();
+  renderGateNote.hidden = !guest;
+  if(guest) renderBtn.disabled = true;
+}
 const aiPrompt = document.getElementById('aiPrompt');
 const aiDirectBtn = document.getElementById('aiDirectBtn');
 const aiStatus = document.getElementById('aiStatus');
@@ -1281,6 +1388,7 @@ function updateEstimate(){
     ? `예상 영상 길이: ${lenStr}  (AI 자동 타이밍, 사진 ${n}장)`
     : `예상 영상 길이: ${lenStr}  (사진 ${n}장 × ${durations[0].toFixed(1)}초)`;
   renderBtn.disabled = false;
+  syncRenderGate();
 }
 
 // --- file loading ---
@@ -3440,6 +3548,12 @@ async function startRender(){
   clearError();
   clearWarning();
 
+  if(!isSignedIn()){
+    syncRenderGate();
+    showError('로그인을 하지 않을 시 렌더링이 불가합니다. 로그인 후 다시 시도해주세요.');
+    return;
+  }
+
   const active = state.photos.filter(p=>p.included);
   if(active.length===0) return;
   renderBtn.disabled = true;
@@ -3995,7 +4109,6 @@ wirePresetChips(document.getElementById('curatorPresets'), curatorPrompt, CURATO
 // The sign-in screen is a front-end facade: there is no account backend, so it
 // records only the e-mail (to personalise the header) and never the password.
 // Everything below is presentation; nothing here gates the renderer.
-const AUTH_KEY = 'vibeCutUser';
 const authOverlay = document.getElementById('authOverlay');
 const authEmail = document.getElementById('authEmail');
 const authPassword = document.getElementById('authPassword');
@@ -4005,10 +4118,8 @@ const accountEmailEl = document.getElementById('accountEmail');
 const onboardModal = document.getElementById('onboardModal');
 const onboardDrop = document.getElementById('onboardDrop');
 const pricingModal = document.getElementById('pricingModal');
+const guestModal = document.getElementById('guestModal');
 
-function storedUser(){
-  try{ return localStorage.getItem(AUTH_KEY); }catch(e){ return null; }
-}
 function syncAccountUI(){
   const user = storedUser();
   accountChip.hidden = !user;
@@ -4026,7 +4137,9 @@ function finishSignIn(email){
   authOverlay.classList.remove('open');
   authPassword.value = ''; // never retained, not even in the DOM
   syncAccountUI();
-  maybeShowOnboarding();
+  syncRenderGate();
+  if(email) maybeShowOnboarding();
+  else guestModal.classList.add('open'); // say what guest mode cannot do first
 }
 
 document.getElementById('authSubmit').addEventListener('click', ()=>{
@@ -4046,9 +4159,23 @@ authEmail.addEventListener('keydown', e=>{
 });
 document.getElementById('authGuest').addEventListener('click', ()=> finishSignIn(null));
 
+document.getElementById('guestContinue').addEventListener('click', ()=>{
+  guestModal.classList.remove('open');
+  maybeShowOnboarding();
+});
+function openSignIn(){
+  guestModal.classList.remove('open');
+  onboardModal.classList.remove('open');
+  pricingModal.classList.remove('open');
+  authOverlay.classList.add('open');
+}
+document.getElementById('guestSignIn').addEventListener('click', openSignIn);
+document.getElementById('gateSignIn').addEventListener('click', openSignIn);
+
 document.getElementById('signOutBtn').addEventListener('click', ()=>{
   try{ localStorage.removeItem(AUTH_KEY); }catch(e){}
   syncAccountUI();
+  syncRenderGate();
   authEmail.value = ''; authPassword.value = ''; authError.textContent = '';
   authOverlay.classList.add('open');
 });
@@ -4079,16 +4206,18 @@ onboardDrop.addEventListener('drop', e=>{
 
 document.getElementById('pricingOpen').addEventListener('click', ()=> pricingModal.classList.add('open'));
 document.getElementById('pricingClose').addEventListener('click', ()=> pricingModal.classList.remove('open'));
-[pricingModal, onboardModal].forEach(m=>{
+[pricingModal, onboardModal, guestModal].forEach(m=>{
   m.addEventListener('click', e=>{ if(e.target === m) m.classList.remove('open'); }); // click the backdrop to dismiss
 });
 document.addEventListener('keydown', e=>{
   if(e.key !== 'Escape') return;
   pricingModal.classList.remove('open');
   onboardModal.classList.remove('open');
+  guestModal.classList.remove('open');
 });
 
 syncAccountUI();
+syncRenderGate();
 if(storedUser()) maybeShowOnboarding();
 else authOverlay.classList.add('open');
 </script>

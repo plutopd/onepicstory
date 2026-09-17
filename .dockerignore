@@ -8,3 +8,11 @@ npm-debug.log
 .claude
 Dockerfile
 .dockerignore
+
+# Presentation artefacts — versioned in git, but the server image has no use
+# for them and they would only slow the build.
+deck_assets
+*.pptx
+DECK_DESIGN.md
+build_deck.js
+image
